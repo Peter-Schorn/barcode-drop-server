@@ -1,11 +1,16 @@
 import Vapor
 
 func routes(_ app: Application) throws {
+
     app.get { req async in
-        "It works!"
+        return "success (version 0.1.0)"
     }
 
-    app.get("hello") { req async -> String in
-        "Hello, world!"
+
+    app.post("scan") { req async throws -> String in
+        let scan = try req.content.decode(Scan.self)
+        req.logger.info("scanned \(scan.barcode)")
+        return "scanned \(scan.barcode)"
     }
+
 }
