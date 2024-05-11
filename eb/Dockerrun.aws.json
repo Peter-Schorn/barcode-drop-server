@@ -1,0 +1,12 @@
+{
+    "AWSEBDockerrunVersion": "1",
+    "Image": {
+        "Name": "947734355387.dkr.ecr.us-east-1.amazonaws.com/barcode-server:latest",
+        "Update": "true"
+    },
+    "Ports": [
+        {
+            "ContainerPort": 8080
+        }
+    ]
+}

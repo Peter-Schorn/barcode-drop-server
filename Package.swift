@@ -8,13 +8,22 @@ let package = Package(
     ],
     dependencies: [
         // 💧 A server-side Swift web framework.
-        .package(url: "https://github.com/vapor/vapor.git", from: "4.92.4"),
+        .package(
+            url: "https://github.com/vapor/vapor.git", 
+            from: "4.92.4"
+        ),
+        .package(
+            url: "https://github.com/orlandos-nl/MongoKitten.git", 
+            from: "7.2.0"
+        )
     ],
     targets: [
         .executableTarget(
             name: "App",
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
+                .product(name: "MongoKitten", package: "MongoKitten"),
+                .product(name: "Meow", package: "MongoKitten")
             ],
             swiftSettings: swiftSettings
         ),
