@@ -7,26 +7,10 @@ func routes(_ app: Application) async throws {
 
     // MARK: Initialize Database
 
-    // guard let password = ProcessInfo.processInfo
-    //         .environment["BARCODE_DROP_DATABASE_PASSWORD"] else {
-    //     fatalError(
-    //         """
-    //         could not retrieve password from BARCODE_DROP_DATABASE_PASSWORD \
-    //         environment variable
-    //         """
-    //     )
-    // }
+    let barcodesCollection = app.mongo["barcodes"]
 
-    let password = "8uuWNY6Hf3WgB4cb"
-
-    let connectionURI = "mongodb+srv://peter:\(password)@barcode-drop.5wwntye.mongodb.net/Barcodes"
-
-    let database = try await MongoDatabase.connect(to: connectionURI)
-    let barcodesCollection = database["barcodes"]
-
-
-    app.get { req async in
-        let message = "success (version 0.1.3)"
+    app.get { req async -> String in
+        let message = "success (version 0.1.5)"
         req.logger.info("\(message)")
         return message
     }
@@ -49,7 +33,7 @@ func routes(_ app: Application) async throws {
         // insert the scanned barcode into the database
         try await barcodesCollection.insertEncoded(scannedBarcode)
 
-        return "scanned '\(scan.barcode)'"
+        return "scanned '\(scannedBarcode.barcode)'"
     }
 
     // GET /scans
@@ -68,7 +52,7 @@ func routes(_ app: Application) async throws {
         )
 
         return response
-    }
 
+    }
 
 }
