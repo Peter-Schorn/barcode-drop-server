@@ -5,7 +5,7 @@ import Vapor
 
 /// Represents a scanned barcode. Decoded from the body of the request to 
 /// POST /scan as url-encoded form data.
-struct Scan: Content {
+struct ScanRequestBody: Content {
 
     static let defaultContentType: HTTPMediaType = .urlEncodedForm
 

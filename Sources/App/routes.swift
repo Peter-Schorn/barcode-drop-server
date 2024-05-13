@@ -1,7 +1,6 @@
 import Foundation
 import Vapor
 @preconcurrency import MongoKitten
-@preconcurrency import Meow
 
 func routes(_ app: Application) async throws {
 
@@ -10,7 +9,7 @@ func routes(_ app: Application) async throws {
     let barcodesCollection = app.mongo["barcodes"]
 
     app.get { req async -> String in
-        let message = "success (version 0.1.5)"
+        let message = "success (version 0.1.6)"
         req.logger.info("\(message)")
         return message
     }
@@ -21,12 +20,20 @@ func routes(_ app: Application) async throws {
     //
     // Request: { "barcode": "1234567890" }
     // Response: "scanned '1234567890'"
-    app.post("scan") { req async throws -> String in
-        let scan = try req.content.decode(Scan.self)
-        req.logger.info("scanned '\(scan.barcode)'")
+    app.post("scan", ":user") { req async throws -> String in
+
+        let user = req.parameters.get("user")
+
+        let scan = try req.content.decode(ScanRequestBody.self)
+
+        req.logger.info(
+            "user '\(user ?? "nil")' scanned '\(scan.barcode)'"
+        )
+        
         let scannedBarcode = ScannedBarcode(
             _id: ObjectId(),
             barcode: scan.barcode,
+            user: user,
             date: Date()  // save date barcode was scanned to the database
         )
 
@@ -36,7 +43,38 @@ func routes(_ app: Application) async throws {
         return "scanned '\(scannedBarcode.barcode)'"
     }
 
+    // GET /scans/:user
+    //
+    // Retrieves scanned barcodes for a user from the database.
+    app.get("scans", ":user") { req async throws -> [ScannedBarcodeResponse] in
+
+        let user = req.parameters.get("user")
+
+        req.logger.info(
+            "retrieving scanned barcodes for user: \(user ?? "nil")"
+        )
+
+        let scans: [ScannedBarcode] = try await barcodesCollection
+            .find("user" == user)  // find all documents for the user
+            .decode(ScannedBarcode.self)  // decode into model type
+            .drain()  // load all documents into memory
+        
+        let response = ScannedBarcodeResponse.array(scans)
+        req.logger.info(
+            """
+            retrieved \(response.count) scanned barcodes for user \
+            \(user ?? "nil"):
+            \(response)
+            """
+        )
+
+        return response
+
+    }
+    
     // GET /scans
+    //
+    // Retrieves all scanned barcodes from the database.
     app.get("scans") { req async throws -> [ScannedBarcodeResponse] in
 
         req.logger.info("retrieving scanned barcodes")
@@ -54,5 +92,166 @@ func routes(_ app: Application) async throws {
         return response
 
     }
+
+    // DELETE /scans/:user
+    //
+    // Deletes all scanned barcodes for a user from the database.
+    app.delete("scans", ":user") { req async throws -> String in
+
+        let user = req.parameters.get("user")
+
+        req.logger.info(
+            "deleting all barcodes for user: \(user ?? "nil")"
+        )
+
+        let result = try await barcodesCollection.deleteAll(
+            where: "user" == user
+        )
+
+        req.logger.info(
+            "delete result: \(result) (user: \(user ?? "nil"))"
+        )
+
+        return "deleted all barcodes for user: \(user ?? "nil")"
+    
+    }
+
+    // DELETE /scans
+    //
+    // Deletes scanned barcodes by id from the database.
+    app.delete("scans") { req async throws -> String in
+
+        let ids = try req.content.decode([String].self, as: .json)
+
+        req.logger.info(
+            "deleting barcodes with ids: \(ids)"
+        )
+
+        if ids.isEmpty {
+            throw Abort(.badRequest)
+        }
+        
+        let doc: Document = [
+            "_id": [
+                "$in": ids.compactMap { ObjectId($0) }
+            ]
+        ]
+
+        let result = try await barcodesCollection.deleteAll(
+            where: doc
+        )
+
+        req.logger.info(
+            "delete result: \(result) (ids: \(ids))"
+        )
+
+        return "deleted barcodes with ids: \(ids)"
+
+    }
+
+    // MARK: Web Sockets
+
+    // WebSocket /watch/:user
+    //
+    // 
+    app.webSocket("watch", ":user") { req, ws in
+
+        guard let user = req.parameters.get("user") else {
+            do {
+                try await ws.send("invalid user")
+            } catch {
+                req.logger.error(
+                    "could not send invalid user message: \(error)"
+                )
+            }
+            do {
+                try await ws.close()
+            } catch {
+                req.logger.error(
+                    "could not close websocket: \(error)"
+                )
+            }
+            return
+        }
+
+        req.logger.info("websocket connected for user: \(user)")
+
+         // handle incoming messages
+
+        ws.onText { ws, text in
+            req.logger.info("received text for user '\(user)': \(text)")
+        }
+
+        // handle websocket disconnect
+        ws.onClose.whenComplete { _ in
+            req.logger.info("websocket disconnected for user: \(user)")
+        }
+
+        let changeStream: ChangeStream<ScannedBarcode>
+
+        do {
+
+            changeStream = try await barcodesCollection.buildChangeStream(
+                options: { 
+                    var options = ChangeStreamOptions()
+                    options.fullDocument = .required
+                    return options
+                }(),
+                ofType: ScannedBarcode.self,
+                build: {
+                    Match(where: "fullDocument.user" == user)
+                }
+            )
+            req.logger.info("created watch stream for user: \(user)")
+
+        } catch {
+            req.logger.error(
+                """
+                could not create watch stream for user \(user): \(error)
+                """
+            )
+            return
+        }
+
+        // handle change stream notifications
+        do {
+
+            for try await notification in changeStream {
+                
+                req.logger.info(
+                    """
+                    received change stream notification for user \(user): 
+                    \(notification)
+                    """
+                )
+                
+                do {
+                    // MARK: Send Refresh Message
+                    try await ws.send("refresh")
+                    req.logger.info("sent refresh message to user: \(user)")
+                    // client should make a request to GET /scans to get the  
+                    // updated list
+                } catch {
+                    req.logger.error(
+                        """
+                        could not send refresh message to user \(user): \
+                        \(error)
+                        """
+                    )
+                }
+
+            }
+        } catch {
+            req.logger.error(
+                """
+                error handling change stream notification for user \
+                \(user): \(error)
+                """
+            )
+        }
+
+
+    }
+
 
 }

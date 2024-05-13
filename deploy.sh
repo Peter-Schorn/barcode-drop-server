@@ -35,3 +35,5 @@ eb deploy
 
 # logs:
 # https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups$3FlogGroupNameFilter$3Dbarcode-server
+#
+# logs tail /aws/elasticbeanstalk/barcode-server-vpc-env/var/log/eb-docker/containers/eb-current-app/stdouterr.log --follow
