@@ -9,12 +9,12 @@ func routes(_ app: Application) async throws {
     let barcodesCollection = app.mongo["barcodes"]
 
     app.get { req async -> String in
-        let message = "success (version 0.1.6)"
+        let message = "success (version 0.1.7)"
         req.logger.info("\(message)")
         return message
     }
 
-    // POST /scan
+    // MARK: POST /scan/<user>
     //
     // Saves scanned barcode to the database.
     //
@@ -22,9 +22,23 @@ func routes(_ app: Application) async throws {
     // Response: "scanned '1234567890'"
     app.post("scan", ":user") { req async throws -> String in
 
+        // req.content
+
         let user = req.parameters.get("user")
 
-        let scan = try req.content.decode(ScanRequestBody.self)
+        let scan: ScanRequestBody = try Result<ScanRequestBody, Error>{
+            // first try to decode using the content type in the header or 
+            // default content type
+            try req.content.decode(ScanRequestBody.self)
+        }
+        // now, try other content types
+        .flatMapErrorThrowing({ error in
+            try req.content.decode(ScanRequestBody.self, as: .json)
+        })
+        .flatMapErrorThrowing({ error in
+                try req.content.decode(ScanRequestBody.self, as: .formData)
+        })
+        .get()
 
         req.logger.info(
             "user '\(user ?? "nil")' scanned '\(scan.barcode)'"
