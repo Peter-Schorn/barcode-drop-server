@@ -8,8 +8,11 @@ func routes(_ app: Application) async throws {
 
     let barcodesCollection = app.mongo["barcodes"]
 
+    // MARK: GET /
+    //
+    // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.1.7)"
+        let message = "success (version 0.1.8)"
         req.logger.info("\(message)")
         return message
     }
@@ -32,11 +35,23 @@ func routes(_ app: Application) async throws {
             try req.content.decode(ScanRequestBody.self)
         }
         // now, try other content types
-        .flatMapErrorThrowing({ error in
-            try req.content.decode(ScanRequestBody.self, as: .json)
+        .flatMapErrorThrowing({ error -> ScanRequestBody in
+            req.logger.debug(
+                """
+                could not decode as header-specified or default content type: \
+                (\(req.content.contentType?.description ?? "nil")):
+                \(error)
+                """
+            )
+            return try req.content.decode(ScanRequestBody.self, as: .json)
         })
-        .flatMapErrorThrowing({ error in
-                try req.content.decode(ScanRequestBody.self, as: .formData)
+        .flatMapErrorThrowing({ error -> ScanRequestBody in
+                req.logger.debug("could not decode as JSON: \(error)")
+                return try req.content.decode(ScanRequestBody.self, as: .formData)
+        })
+        .mapError({ error in
+            req.logger.debug("could not decode as form data: \(error)")
+            return error
         })
         .get()
 
@@ -57,7 +72,7 @@ func routes(_ app: Application) async throws {
         return "user '\(user ?? "nil")' scanned '\(scannedBarcode.barcode)'"
     }
 
-    // GET /scans/:user
+    // MARK: GET /scans/:user
     //
     // Retrieves scanned barcodes for a user from the database.
     app.get("scans", ":user") { req async throws -> [ScannedBarcodeResponse] in
@@ -86,7 +101,7 @@ func routes(_ app: Application) async throws {
 
     }
     
-    // GET /scans
+    // MARK: GET /scans
     //
     // Retrieves all scanned barcodes from the database.
     app.get("scans") { req async throws -> [ScannedBarcodeResponse] in
@@ -107,7 +122,7 @@ func routes(_ app: Application) async throws {
 
     }
 
-    // DELETE /scans/:user
+    // MARK: DELETE /scans/:user
     //
     // Deletes all scanned barcodes for a user from the database.
     app.delete("scans", ":user") { req async throws -> String in
@@ -130,12 +145,34 @@ func routes(_ app: Application) async throws {
     
     }
 
-    // DELETE /scans
+    // MARK: DELETE /scans
     //
     // Deletes scanned barcodes by id from the database.
+    //
+    // Request body: ["<id1>", "<id2>", ...]
+    // 
+    // Or, as a URL query parameter: a comma separated list:
+    // /scans?ids=<id1>,<id2>...
     app.delete("scans") { req async throws -> String in
 
-        let ids = try req.content.decode([String].self, as: .json)
+        let ids: [String] = try Result { 
+            try req.content.decode([String].self, as: .json)
+        }
+        .flatMapErrorThrowing({ error -> [String] in
+            req.logger.info(
+                """
+                could not decode request body as JSON: \(error)
+                """
+            )
+            return try req.query.get([String].self, at: "ids")
+        })
+        .mapError({ error -> Error in
+            req.logger.info(
+                "could not decode request query parameter 'ids': \(error)"
+            )
+            return error
+        })
+        .get()
 
         req.logger.info(
             "deleting barcodes with ids: \(ids)"
@@ -160,6 +197,20 @@ func routes(_ app: Application) async throws {
         )
 
         return "deleted barcodes with ids: \(ids)"
+
+    }
+
+    app.get("users") { req async throws -> [String] in
+
+        req.logger.info("retrieving users")
+
+        let users: [String] = try await barcodesCollection
+            .distinctValues(forKey: "user")
+            .compactMap { $0 as? String }
+        
+        req.logger.info("retrieved users: \(users)")
+
+        return users
 
     }
 
