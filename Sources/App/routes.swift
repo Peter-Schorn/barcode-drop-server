@@ -40,7 +40,7 @@ func routes(_ app: Application) async throws {
         // insert the scanned barcode into the database
         try await barcodesCollection.insertEncoded(scannedBarcode)
 
-        return "scanned '\(scannedBarcode.barcode)'"
+        return "user '\(user ?? "nil")' scanned '\(scannedBarcode.barcode)'"
     }
 
     // GET /scans/:user
