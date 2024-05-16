@@ -30,51 +30,38 @@ func routes(_ app: Application) async throws {
 
         let user = req.parameters.get("user")
 
-        /// decoded request body / query parameter
-        let scan: ScanRequestBody
-
-        getScan: do {
-
-            if req.body.data == nil {
-                // MARK: Try to decode as URL Query Parameter
-                do {
-                    scan = try req.query.decode(ScanRequestBody.self)
-                    break getScan  // BREAK
-                } catch {
-                    req.logger.debug(
-                        "could not decode as query parameter \(req.url): \(error)"
-                    )
-                }
-            }
-            
             // MARK: Decode Request Body
-            scan = try Result<ScanRequestBody, Error>{
-                // first try to decode using the content type in the header or 
-                // default content type
-                try req.content.decode(ScanRequestBody.self)
-            }
-            // now, try other content types
-            .flatMapErrorThrowing({ error -> ScanRequestBody in
-                req.logger.debug(
-                    """
-                    could not decode as header-specified or default content type: \
-                    (\(req.content.contentType?.description ?? "nil")):
-                    \(error)
-                    """
-                )
-                return try req.content.decode(ScanRequestBody.self, as: .json)
-            })
-            .flatMapErrorThrowing({ error -> ScanRequestBody in
-                    req.logger.debug("could not decode as JSON: \(error)")
-                    return try req.content.decode(ScanRequestBody.self, as: .formData)
-            })
-            .mapError({ error in
-                req.logger.debug("could not decode as form data: \(error)")
-                return error
-            })
-            .get()
-
+        let scan: ScanRequestBody = try Result<ScanRequestBody, Error>{
+            // first try to decode using the content type in the header or 
+            // default content type
+            try req.content.decode(ScanRequestBody.self)
         }
+        // now, try other content types
+        .flatMapErrorThrowing({ error -> ScanRequestBody in
+            req.logger.debug(
+                """
+                could not decode as header-specified or default content type: \
+                (\(req.content.contentType?.description ?? "nil")):
+                \(error)
+                """
+            )
+            return try req.content.decode(ScanRequestBody.self, as: .json)
+        })
+        .flatMapErrorThrowing({ error -> ScanRequestBody in
+            req.logger.debug("could not decode as JSON: \(error)")
+            return try req.content.decode(ScanRequestBody.self, as: .formData)
+        })
+        .flatMapErrorThrowing({ error -> ScanRequestBody in
+            req.logger.debug("could not decode as form data: \(error)")
+            return try req.query.decode(ScanRequestBody.self)   
+        })
+        .mapError({ error in
+            req.logger.debug(
+                "could not decode query for \(req.url): \(error)"
+            )
+            return error
+        })
+        .get()
 
         req.logger.info(
             "user '\(user ?? "nil")' scanned '\(scan.barcode)'"
