@@ -12,7 +12,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.1.8)"
+        let message = "success (version 0.1.9)"
         req.logger.info("\(message)")
         return message
     }
@@ -22,6 +22,7 @@ func routes(_ app: Application) async throws {
     // Saves scanned barcode to the database.
     //
     // Request: { "barcode": "1234567890" }
+    // ?barcode=1234567890
     // Response: "scanned '1234567890'"
     app.post("scan", ":user") { req async throws -> String in
 
@@ -29,31 +30,51 @@ func routes(_ app: Application) async throws {
 
         let user = req.parameters.get("user")
 
-        let scan: ScanRequestBody = try Result<ScanRequestBody, Error>{
-            // first try to decode using the content type in the header or 
-            // default content type
-            try req.content.decode(ScanRequestBody.self)
+        /// decoded request body / query parameter
+        let scan: ScanRequestBody
+
+        getScan: do {
+
+            if req.body.data == nil {
+                // MARK: Try to decode as URL Query Parameter
+                do {
+                    scan = try req.query.decode(ScanRequestBody.self)
+                    break getScan  // BREAK
+                } catch {
+                    req.logger.debug(
+                        "could not decode as query parameter \(req.url): \(error)"
+                    )
+                }
+            }
+            
+            // MARK: Decode Request Body
+            scan = try Result<ScanRequestBody, Error>{
+                // first try to decode using the content type in the header or 
+                // default content type
+                try req.content.decode(ScanRequestBody.self)
+            }
+            // now, try other content types
+            .flatMapErrorThrowing({ error -> ScanRequestBody in
+                req.logger.debug(
+                    """
+                    could not decode as header-specified or default content type: \
+                    (\(req.content.contentType?.description ?? "nil")):
+                    \(error)
+                    """
+                )
+                return try req.content.decode(ScanRequestBody.self, as: .json)
+            })
+            .flatMapErrorThrowing({ error -> ScanRequestBody in
+                    req.logger.debug("could not decode as JSON: \(error)")
+                    return try req.content.decode(ScanRequestBody.self, as: .formData)
+            })
+            .mapError({ error in
+                req.logger.debug("could not decode as form data: \(error)")
+                return error
+            })
+            .get()
+
         }
-        // now, try other content types
-        .flatMapErrorThrowing({ error -> ScanRequestBody in
-            req.logger.debug(
-                """
-                could not decode as header-specified or default content type: \
-                (\(req.content.contentType?.description ?? "nil")):
-                \(error)
-                """
-            )
-            return try req.content.decode(ScanRequestBody.self, as: .json)
-        })
-        .flatMapErrorThrowing({ error -> ScanRequestBody in
-                req.logger.debug("could not decode as JSON: \(error)")
-                return try req.content.decode(ScanRequestBody.self, as: .formData)
-        })
-        .mapError({ error in
-            req.logger.debug("could not decode as form data: \(error)")
-            return error
-        })
-        .get()
 
         req.logger.info(
             "user '\(user ?? "nil")' scanned '\(scan.barcode)'"
@@ -105,6 +126,8 @@ func routes(_ app: Application) async throws {
     //
     // Retrieves all scanned barcodes from the database.
     app.get("scans") { req async throws -> [ScannedBarcodeResponse] in
+
+        // req.response.headers.add(name: "Content-Type", value: "application/json")
 
         req.logger.info("retrieving scanned barcodes")
 

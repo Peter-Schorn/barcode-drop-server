@@ -1,0 +1,28 @@
+version: 0.1
+
+run-as: peter
+
+phases:
+  install:
+    on-failure: ABORT
+    commands:
+      - echo "might need to install stuff"
+  build:
+    on-failure: ABORT
+    commands:
+      - build_and_push.sh
+  # post_build:
+  #   on-failure: ABORT
+  #   commands:
+  #     - cd eb
+  #     - echo '\n====== Deploying to Elastic Beanstalk ======\n'
+  #     - eb deploy
+artifacts:
+  files:
+    - 'Dockerrun.aws.json'
+
+eb_codebuild_settings:
+  CodeBuildServiceRole: CodeBuildServiceRole1
+  ComputeType: BUILD_GENERAL1_LARGE
+  Image: 947734355387.dkr.ecr.us-east-1.amazonaws.com/barcode-server:latest
+  Timeout: 10

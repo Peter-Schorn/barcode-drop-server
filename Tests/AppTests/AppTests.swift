@@ -14,10 +14,13 @@ final class AppTests: XCTestCase {
         self.app = nil
     }
     
-    func testHelloWorld() async throws {
-        // try self.app.test(.GET, "hello", afterResponse: { res in
-        //     XCTAssertEqual(res.status, .ok)
-        //     XCTAssertEqual(res.body.string, "Hello, world!")
-        // })
+    func testRootEndpoint() async throws {
+        try self.app.test(.GET, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            XCTAssert(
+                res.body.string.startsWith("success"), 
+                "response did not start with 'success': '\(res.body.string)'"
+            )
+        })
     }
 }
