@@ -20,8 +20,16 @@ func routes(_ app: Application) async throws {
     // MARK: POST /scan/<user>
     //
     // Saves scanned barcode to the database.
+    // 
+    // The barcode can be sent in the request body as JSON, URL encoded, or
+    // in the query string. If both are present, then the request body takes 
+    // precedence.
     //
-    // Request: 
+    // The barcode is saved to the database along with the
+    // user who scanned it and the date it was scanned.
+    //
+    // Request:
+    //
     // JSON: { "barcode": "abc123" }
     // URL Encoded: barcode=abc123
     // Query String: ?barcode=abc123
