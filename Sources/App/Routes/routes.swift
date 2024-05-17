@@ -12,7 +12,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.1.9)"
+        let message = "success (version 0.1.10)"
         req.logger.info("\(message)")
         return message
     }
@@ -104,15 +104,79 @@ func routes(_ app: Application) async throws {
         }
     }
 
+    // MARK: GET /scans
+    //
+    // Retrieves all scanned barcodes from the database.
+    app.get("scans") { req async throws -> Response in
+
+        let format = try req.query.get(
+            ScansOption.self,
+            at: "format"
+        )
+
+        req.logger.info(
+            "retrieving scanned barcodes with format: \(format)"
+        )
+
+        let scans: [ScannedBarcode] = try await barcodesCollection
+            .find()  // find all documents in the collection
+            .decode(ScannedBarcode.self)  // decode into model type
+            .drain()  // load all documents into memory
+        
+        let scannedBarcodesResponse = ScannedBarcodeResponse.array(scans)
+        
+        req.logger.info(
+            """
+            retrieved \(scannedBarcodesResponse.count) scanned barcodes:
+            \(scannedBarcodesResponse)
+            """
+        )
+
+        let responseBody: Data
+        switch format {
+            case .barcodesOnly:
+                let responseString = scannedBarcodesResponse
+                    .map { $0.barcode }
+                    .joined(separator: "\n")
+                responseBody = responseString.data(using: .utf8) ?? Data()
+            case .json:
+                responseBody = try JSONEncoder().encode(scans)
+        }
+
+        let headers: HTTPHeaders = format == .barcodesOnly
+            ? ["Content-Type": "text/plain"]
+            : ["Content-Type": "application/json"]
+
+        let response = Response(
+            status: .ok,
+            headers: headers,
+            body: Response.Body(data: responseBody)
+        )
+
+        return response
+
+    }
+
     // MARK: GET /scans/:user
     //
+    // TODO: document format option
     // Retrieves scanned barcodes for a user from the database.
-    app.get("scans", ":user") { req async throws -> [ScannedBarcodeResponse] in
+    app.get("scans", ":user") { req async throws -> Response in
 
         let user = req.parameters.get("user")
 
+        let format = try req.query.get(
+            ScansOption.self,
+            at: "format"
+        )
+
+        // let format = ScansOption.json
+
         req.logger.info(
-            "retrieving scanned barcodes for user: \(user ?? "nil")"
+            """
+            retrieving scanned barcodes for user \(user ?? "nil") with format: \
+            \(format)
+            """
         )
 
         let scans: [ScannedBarcode] = try await barcodesCollection
@@ -120,39 +184,135 @@ func routes(_ app: Application) async throws {
             .decode(ScannedBarcode.self)  // decode into model type
             .drain()  // load all documents into memory
         
-        let response = ScannedBarcodeResponse.array(scans)
+        let scannedBarcodesResponse = ScannedBarcodeResponse.array(scans)
+        
         req.logger.info(
             """
-            retrieved \(response.count) scanned barcodes for user \
-            \(user ?? "nil"):
-            \(response)
+            retrieved \(scannedBarcodesResponse.count) \
+            scanned barcodes for user \(user ?? "nil"):
+            \(scannedBarcodesResponse)
             """
+        )
+
+        let responseBody: Data
+        switch format {
+            case .barcodesOnly:
+                let responseString = scannedBarcodesResponse
+                    .map { $0.barcode }
+                    .joined(separator: "\n")
+                responseBody = responseString.data(using: .utf8) ?? Data()
+            case .json:
+                responseBody = try JSONEncoder().encode(scans)
+        }
+
+        let headers: HTTPHeaders = format == .barcodesOnly
+            ? ["Content-Type": "text/plain"]
+            : ["Content-Type": "application/json"]
+
+        let response = Response(
+            status: .ok,
+            headers: headers,
+            body: Response.Body(data: responseBody)
+        )
+
+        return response
+
+    }
+
+    // MARK: GET /scans/:user/latest
+    //
+    // Retrieves the last scanned barcode for a user from the database.
+    //
+    // Query parameter: ?format=<format>
+    // <format>: the format of the response. The default is 
+    // "barcode-only", which returns only the barcode as plain text. The second
+    // option is "json", which returns the full response as a JSON object with 
+    // the barcode, user, id, and date.
+    // 
+    // If no scanned barcodes are found for the user, a 204 no content response 
+    // is returned.
+    app.get("scans", ":user", "latest") { req async throws -> Response in
+
+        guard let user = req.parameters.get("user") else {
+            req.logger.error(
+                "could not get user parameter for: \(req.url)"
+            )
+            throw Abort(.badRequest)
+        }
+
+        let format = try req.query.get(
+            LatestScanOption.self,
+            at: "format"
+        )
+        // let format = LatestScanOption.json
+
+        req.logger.info(
+            """
+            retrieving latest scanned barcode for user \(user) with format: \
+            \(format)
+            """
+        )
+
+        let latestScan: ScannedBarcode? = try await barcodesCollection
+            .find("user" == user)
+            .sort(["date": -1])
+            .limit(1)
+            .decode(ScannedBarcode.self)
+            .drain()
+            .first
+
+        guard let scan = latestScan else {
+            req.logger.info(
+                "no scanned barcodes found for user: \(user)"
+            )
+            return Response(status: .noContent)
+        }
+        
+        req.logger.info(
+            """
+            retrieved latest scanned barcode for user \(user): \
+            \(scan)
+            """
+        )
+
+        let headers: HTTPHeaders = format == .barcodeOnly
+            ? ["Content-Type": "text/plain"]
+            : ["Content-Type": "application/json"]
+
+        let responseData: Data
+        switch format {
+            case .barcodeOnly:
+                responseData = scan.barcode.data(using: .utf8) ?? Data()
+            case .json:
+                responseData = try JSONEncoder().encode(
+                    ScannedBarcodeResponse(scan)
+                )
+        }
+
+        let response = Response(
+            status: .ok,
+            headers: headers,
+            body: Response.Body(data: responseData)
         )
 
         return response
 
     }
     
-    // MARK: GET /scans
+    // MARK: GET /users
     //
-    // Retrieves all scanned barcodes from the database.
-    app.get("scans") { req async throws -> [ScannedBarcodeResponse] in
+    // Retrieves all users who have scanned barcodes.
+    app.get("users") { req async throws -> [String] in
 
-        // req.response.headers.add(name: "Content-Type", value: "application/json")
+        req.logger.info("retrieving users")
 
-        req.logger.info("retrieving scanned barcodes")
-
-        let scans: [ScannedBarcode] = try await barcodesCollection
-            .find()  // find all documents in the collection
-            .decode(ScannedBarcode.self)  // decode into model type
-            .drain()  // load all documents into memory
+        let users: [String] = try await barcodesCollection
+            .distinctValues(forKey: "user")
+            .compactMap { $0 as? String }
         
-        let response = ScannedBarcodeResponse.array(scans)
-        req.logger.info(
-            "retrieved \(response.count) scanned barcodes: \(response)"
-        )
+        req.logger.info("retrieved users: \(users)")
 
-        return response
+        return users
 
     }
 
@@ -172,7 +332,7 @@ func routes(_ app: Application) async throws {
         )
 
         req.logger.info(
-            "delete result: \(result) (user: \(user ?? "nil"))"
+            "delete result for user \(user ?? "nil"): \(result)"
         )
 
         return "deleted all barcodes for user: \(user ?? "nil")"
@@ -216,14 +376,12 @@ func routes(_ app: Application) async throws {
             throw Abort(.badRequest)
         }
         
-        let doc: Document = [
-            "_id": [
-                "$in": ids.compactMap { ObjectId($0) }
-            ]
-        ]
-
         let result = try await barcodesCollection.deleteAll(
-            where: doc
+            where: [
+                "_id": [
+                    "$in": ids.compactMap { ObjectId($0) }
+                ]
+            ]
         )
 
         req.logger.info(
@@ -234,21 +392,65 @@ func routes(_ app: Application) async throws {
 
     }
 
-    app.get("users") { req async throws -> [String] in
+    // MARK: DELETE /scans/<user>/older?t=<seconds>
+    //
+    // Deletes scanned barcodes for a user older than a specified number of
+    // seconds (Int) from the database. The default is 300 seconds (5 minutes).
+    app.delete("scans", ":user", "older") { req async throws -> String in
 
-        req.logger.info("retrieving users")
+        req.logger.info(
+            "\(req.route?.description ?? "couldn't get route description")"
+        )
 
-        let users: [String] = try await barcodesCollection
-            .distinctValues(forKey: "user")
-            .compactMap { $0 as? String }
-        
-        req.logger.info("retrieved users: \(users)")
+        guard let user = req.parameters.get("user") else {
+            req.logger.error(
+                "could not get user parameter for: \(req.url)"
+            )
+            throw Abort(.badRequest)
+        }
 
-        return users
+        let seconds = try req.query["t"].flatMap { secondsString throws -> Int in
+            guard let int = Int(secondsString) else {
+                req.logger.error(
+                    """
+                    could not convert secondsString '\(secondsString)' to Int \
+                    for user: \(user)
+                    """
+                )
+                throw Abort(.badRequest)
+            }
+            return int
+        } ?? 300  // DEFAULT: 300 seconds (5 minutes)
+
+        req.logger.info(
+            "deleting barcodes older than \(seconds) seconds for user: \(user)"
+        )
+
+        let date = Date().addingTimeInterval(TimeInterval(-seconds))
+
+        let result = try await barcodesCollection.deleteAll(
+            where: "user" == user && "date" < date
+        )
+
+        req.logger.info(
+            """
+            delete result for user \(user), older than \(seconds) seconds: \
+            \(result)
+            """
+        )
+
+        return """
+            deleted barcodes older than \(seconds) seconds for user: \(user)
+            """
 
     }
 
-    // MARK: Web Sockets
+    // TODO: /scans/:user/tail
+    // tails scans from user: server sends continuous stream of scanned barcodes
+    // to the client
+
+
+    // MARK: - Web Sockets -
 
     // WebSocket /watch/:user
     //

@@ -1,0 +1,27 @@
+import Vapor
+import Foundation
+
+enum ScansOption: String, Codable {
+
+    case barcodesOnly = "barcodes-only"
+    case json
+
+    static let defaultValue: Self = .json
+
+    init(from decoder: Decoder) throws {
+
+        let container = try decoder.singleValueContainer()
+
+        do {
+            let string = try container.decode(String.self)
+            self = Self(rawValue: string) ?? .defaultValue
+
+        } catch let error {
+            _ = error
+            self = .defaultValue
+            return
+        }
+
+    }
+
+}
