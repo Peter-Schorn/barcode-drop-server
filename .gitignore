@@ -10,7 +10,9 @@ db.sqlite
 .env.*
 ! .env.example
 .vscode
-
+config
 
 # Elastic Beanstalk Files
-.elasticbeanstalk/**
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
