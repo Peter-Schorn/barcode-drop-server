@@ -6,11 +6,12 @@ phases:
   install:
     on-failure: ABORT
     commands:
+      - echo "4:38PM"
       - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 947734355387.dkr.ecr.us-east-1.amazonaws.com
   build:
     on-failure: ABORT
     commands:
-      - build_and_push.sh
+      - ./build_and_push.sh
   # post_build:
   #   on-failure: ABORT
   #   commands:
@@ -24,5 +25,5 @@ artifacts:
 eb_codebuild_settings:
   CodeBuildServiceRole: CodeBuildServiceRole1
   ComputeType: BUILD_GENERAL1_LARGE
-  Image: 947734355387.dkr.ecr.us-east-1.amazonaws.com/barcode-server:latest
+  Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0
   Timeout: 10

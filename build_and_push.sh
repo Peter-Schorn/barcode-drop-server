@@ -1,3 +1,5 @@
+#!/bin/sh
+
 echo "====== Building and Pushing Barcode Server ======"
 
 registery=947734355387.dkr.ecr.us-east-1.amazonaws.com
