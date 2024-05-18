@@ -12,7 +12,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.1.10)"
+        let message = "success (version 0.1.11)"
         req.logger.info("\(message)")
         return message
     }
