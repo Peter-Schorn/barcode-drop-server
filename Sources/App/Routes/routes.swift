@@ -120,6 +120,7 @@ func routes(_ app: Application) async throws {
 
         let scans: [ScannedBarcode] = try await barcodesCollection
             .find()  // find all documents in the collection
+            .sort(["date": -1])  // sort by date in descending order
             .decode(ScannedBarcode.self)  // decode into model type
             .drain()  // load all documents into memory
         
@@ -132,26 +133,17 @@ func routes(_ app: Application) async throws {
             """
         )
 
-        let responseBody: Data
+        let response: Response
         switch format {
             case .barcodesOnly:
                 let responseString = scannedBarcodesResponse
                     .map { $0.barcode }
                     .joined(separator: "\n")
-                responseBody = responseString.data(using: .utf8) ?? Data()
+                response = try await responseString.encodeResponse(for: req)
             case .json:
-                responseBody = try JSONEncoder().encode(scans)
+                response = try await scannedBarcodesResponse
+                    .encodeResponse(for: req)
         }
-
-        let headers: HTTPHeaders = format == .barcodesOnly
-            ? ["Content-Type": "text/plain"]
-            : ["Content-Type": "application/json"]
-
-        let response = Response(
-            status: .ok,
-            headers: headers,
-            body: Response.Body(data: responseBody)
-        )
 
         return response
 
@@ -181,6 +173,7 @@ func routes(_ app: Application) async throws {
 
         let scans: [ScannedBarcode] = try await barcodesCollection
             .find("user" == user)  // find all documents for the user
+            .sort(["date": -1])  // sort by date in descending order
             .decode(ScannedBarcode.self)  // decode into model type
             .drain()  // load all documents into memory
         
@@ -194,26 +187,19 @@ func routes(_ app: Application) async throws {
             """
         )
 
-        let responseBody: Data
+        // return scannedBarcodesResponse
+
+        let response: Response
         switch format {
             case .barcodesOnly:
                 let responseString = scannedBarcodesResponse
                     .map { $0.barcode }
                     .joined(separator: "\n")
-                responseBody = responseString.data(using: .utf8) ?? Data()
+                response = try await responseString.encodeResponse(for: req)
             case .json:
-                responseBody = try JSONEncoder().encode(scans)
+                response = try await scannedBarcodesResponse
+                    .encodeResponse(for: req)
         }
-
-        let headers: HTTPHeaders = format == .barcodesOnly
-            ? ["Content-Type": "text/plain"]
-            : ["Content-Type": "application/json"]
-
-        let response = Response(
-            status: .ok,
-            headers: headers,
-            body: Response.Body(data: responseBody)
-        )
 
         return response
 
@@ -267,6 +253,8 @@ func routes(_ app: Application) async throws {
             )
             return Response(status: .noContent)
         }
+
+        let scannedBarcodeResponse = ScannedBarcodeResponse(scan)
         
         req.logger.info(
             """
@@ -275,25 +263,16 @@ func routes(_ app: Application) async throws {
             """
         )
 
-        let headers: HTTPHeaders = format == .barcodeOnly
-            ? ["Content-Type": "text/plain"]
-            : ["Content-Type": "application/json"]
-
-        let responseData: Data
+        let response: Response
         switch format {
             case .barcodeOnly:
-                responseData = scan.barcode.data(using: .utf8) ?? Data()
+                response = try await scannedBarcodeResponse
+                    .barcode
+                    .encodeResponse(for: req)
             case .json:
-                responseData = try JSONEncoder().encode(
-                    ScannedBarcodeResponse(scan)
-                )
+                response = try await scannedBarcodeResponse
+                    .encodeResponse(for: req)
         }
-
-        let response = Response(
-            status: .ok,
-            headers: headers,
-            body: Response.Body(data: responseData)
-        )
 
         return response
 
@@ -391,6 +370,10 @@ func routes(_ app: Application) async throws {
         return "deleted barcodes with ids: \(ids)"
 
     }
+
+    // TODO: DELETE /all-scans/older?t=<seconds>
+    // We need a method for deleting all older scans.
+    // Cannot conflict with other routes.
 
     // MARK: DELETE /scans/<user>/older?t=<seconds>
     //
