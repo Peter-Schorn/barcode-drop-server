@@ -1,5 +1,5 @@
 import Vapor
-import MongoKitten
+@preconcurrency import MongoKitten
 import Foundation
 
 struct ScanStreamCollection: RouteCollection {
@@ -35,6 +35,9 @@ struct ScanStreamCollection: RouteCollection {
         // TODO: Add query parameter ?latest=true to only stream the latest scan
         // TODO: for the user (will be continuously replaced by the latest scan).
         let latest = req.query["latest"] == "true"
+
+        // TODO: REMOVE
+        let _ = latest
 
         let stream: AsyncThrowingStream<String, Error> = { 
             fatalError("not implemented") 

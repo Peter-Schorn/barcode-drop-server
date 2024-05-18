@@ -15,3 +15,13 @@ extension Result {
     }
 
 }
+
+extension JSONEncoder {
+
+    static let sortedKeysPrettyPrinted: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        return encoder
+    }()
+
+}

@@ -1,7 +1,7 @@
 import Foundation
 import Vapor
-@preconcurrency import MongoKitten
-@preconcurrency import Meow
+import MongoKitten
+import Meow
 
 /// MongoDB Model representing a scanned barcode. Used to save barcodes to the 
 /// database.

@@ -1,10 +1,9 @@
 import Foundation
 import Vapor
-@preconcurrency import MongoKitten
-@preconcurrency import Meow
+import MongoKitten
 
 /// Represents a scanned barcode. Used in the response to GET /scans.
-struct ScannedBarcodeResponse: Content {
+struct ScannedBarcodeResponse: Sendable, Content {
 
     static let defaultContentType: HTTPMediaType = .json
 

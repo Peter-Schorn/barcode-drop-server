@@ -1,7 +1,7 @@
 import Vapor
 import Foundation
 
-enum LatestScanOption: String, Codable {
+enum LatestScanOption: String, Sendable, Codable {
 
     case barcodeOnly = "barcode-only"
     case json

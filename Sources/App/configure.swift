@@ -12,7 +12,8 @@ public func configure(_ app: Application) async throws {
     // MARK: - CORS Middleware -
     let corsConfiguration = CORSMiddleware.Configuration(
         allowedOrigin: .all,
-        allowedMethods: [.GET,
+        allowedMethods: [
+            .GET,
             .POST,
             .PUT,
             .OPTIONS,
@@ -50,7 +51,7 @@ public func configure(_ app: Application) async throws {
         )
     }
 
-    let connectionURI = "mongodb+srv://peter:\(password)@barcode-drop.5wwntye.mongodb.net/Barcodes"
+    let connectionURI = "mongodb+srv://peter:\(password)@barcode-drop.w0gnolp.mongodb.net/Barcodes"
 
     try app.initializeMongoDB(connectionString: connectionURI)
 

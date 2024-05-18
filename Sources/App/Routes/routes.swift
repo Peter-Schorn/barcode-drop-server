@@ -133,16 +133,18 @@ func routes(_ app: Application) async throws {
             """
         )
 
-        let response: Response
+        let response = Response()
         switch format {
             case .barcodesOnly:
                 let responseString = scannedBarcodesResponse
                     .map { $0.barcode }
                     .joined(separator: "\n")
-                response = try await responseString.encodeResponse(for: req)
+                try response.content.encode(responseString)
             case .json:
-                response = try await scannedBarcodesResponse
-                    .encodeResponse(for: req)
+                try response.content.encode(
+                    scannedBarcodesResponse,
+                    using: JSONEncoder.sortedKeysPrettyPrinted
+                )
         }
 
         return response
@@ -188,17 +190,19 @@ func routes(_ app: Application) async throws {
         )
 
         // return scannedBarcodesResponse
-
-        let response: Response
+        
+        let response = Response()
         switch format {
             case .barcodesOnly:
                 let responseString = scannedBarcodesResponse
                     .map { $0.barcode }
                     .joined(separator: "\n")
-                response = try await responseString.encodeResponse(for: req)
+                try response.content.encode(responseString)
             case .json:
-                response = try await scannedBarcodesResponse
-                    .encodeResponse(for: req)
+                try response.content.encode(
+                    scannedBarcodesResponse,
+                    using: JSONEncoder.sortedKeysPrettyPrinted
+                )
         }
 
         return response
@@ -263,15 +267,29 @@ func routes(_ app: Application) async throws {
             """
         )
 
-        let response: Response
+        // let response: Response
+        // switch format {
+        //     case .barcodeOnly:
+        //         response = try await scannedBarcodeResponse
+        //             .barcode
+        //             .encodeResponse(for: req)
+        //     case .json:
+        //         response = try await scannedBarcodeResponse
+        //             .encodeResponse(for: req)
+        // }
+
+        // return response
+
+        let response = Response()
         switch format {
             case .barcodeOnly:
-                response = try await scannedBarcodeResponse
-                    .barcode
-                    .encodeResponse(for: req)
+                let responseString = scannedBarcodeResponse.barcode
+                try response.content.encode(responseString)
             case .json:
-                response = try await scannedBarcodeResponse
-                    .encodeResponse(for: req)
+                try response.content.encode(
+                    scannedBarcodeResponse,
+                    using: JSONEncoder.sortedKeysPrettyPrinted
+                )
         }
 
         return response

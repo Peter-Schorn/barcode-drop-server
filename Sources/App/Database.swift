@@ -11,7 +11,7 @@ extension Request {
     }
 }
 
-private struct MongoDBStorageKey: StorageKey {
+private struct MongoDBStorageKey: Sendable, StorageKey {
     typealias Value = MongoDatabase
 }
 
