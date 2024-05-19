@@ -54,16 +54,16 @@ func routes(_ app: Application) async throws {
                     \(error)
                     """
                 )
-                return try req.content.decode(ScanRequestBody.self, as: .json)
-            })
-            .flatMapErrorThrowing({ error -> ScanRequestBody in
-                req.logger.debug("could not decode as JSON: \(error)")
                 return try req.query.decode(ScanRequestBody.self)   
             })
             .flatMapErrorThrowing({ error -> ScanRequestBody in
                 req.logger.debug(
                     "could not decode query for \(req.url): \(error)"
                 )
+                return try req.content.decode(ScanRequestBody.self, as: .json)
+            })
+            .flatMapErrorThrowing({ error -> ScanRequestBody in
+                req.logger.debug("could not decode as JSON: \(error)")
                 return try req.content.decode(ScanRequestBody.self, as: .formData)
             })
             .mapError({ error in
