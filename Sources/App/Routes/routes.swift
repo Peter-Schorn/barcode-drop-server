@@ -548,70 +548,9 @@ func routes(_ app: Application) async throws {
 
     // MARK: - Streaming -
     
-    app.on(.GET, "count-to-10")  { request -> Response in
-        let r = Response(body: .init(stream: { writer in
-            var counter = 0
-            request.eventLoop.scheduleRepeatedTask(
-                initialDelay: .seconds(1), 
-                delay: .seconds(1)
-            ) { repeatedTask in
-                counter += 1
-                guard counter <= 10 else {
-                    repeatedTask.cancel()
-                    writer.write(.end, promise: nil)
-                    return
-                }
-                writer.write(.buffer(.init(string: "\(counter)")), promise: nil)
-            }
-        }, count: 0))
-        r.headers.remove(name: "content-length") // workaround for https://github.com/vapor/vapor/issues/2392
-        return r
-    }
-
-    
     // MARK: GET /scans/:user/tail    
     // tails scans from user: server sends continuous stream of scanned barcodes
     // to the client
-    // app.get("scans", ":user", "tail") { request -> Response in
-    //     let user = request.parameters.get("user")
-    //     // let stream = ScanStreamCollection.streams[user]
-    //     // return Response(status: .ok, body: stream)
-        
-    //     return Response(status: .ok)
-    // }
-
-   
-    // app.on(.GET, "stream", ":count") { request -> Response in
-    //     guard let count = request.parameters.get("count", as: Int.self), count > 0, count <= 100 else {
-    //         return Response(status: .badRequest)
-    //     }
-    //     let encoder = JSONEncoder()
-    //     // let rep = try reply(to: request)
-    //     let reply = "this is the reply"
-    //     let buffer = try! encoder.encodeAsByteBuffer(reply, allocator: app.allocator)
-    //     let response = Response(body: .init(stream: { writer in
-    //         let start = writer.write(.buffer(buffer.chunked(allocator: app.allocator)))
-    //         var next = start
-    //         for _ in 1..<count {
-    //             next = next.flatMap {
-    //                 request.eventLoop.scheduleTask(in: .milliseconds(1000)) {
-    //                     _ = writer.write(.buffer(buffer.chunked(allocator: app.allocator)))
-    //                 }.futureResult
-    //             }
-    //         }
-            
-    //         var buffer = app.allocator.buffer(capacity: 3)
-    //         buffer.writeString("0\r\n\r\n")
-    //         next = next.flatMap { writer.write(.buffer(buffer)) }
-            
-    //         _ = next.flatMap { writer.write(.end) }
-    //     }, count: 0))
-    //     response.headers.replaceOrAdd(name: .transferEncoding, value: "chunked")
-    //     response.headers.remove(name: .contentLength)
-        
-    //     return response
-    // }
-
 
     // MARK: - Web Sockets -
 
