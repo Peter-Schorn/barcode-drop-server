@@ -255,9 +255,13 @@ func routes(_ app: Application) async throws {
 
         guard let scan = latestScan else {
             req.logger.info(
-                "no scanned barcodes found for user: \(user)"
+                """
+                no scanned barcodes found for user: \(user); \
+                will return empty response
+                
+                """
             )
-            return Response(status: .noContent)
+            return Response(status: .ok)
         }
 
         let scannedBarcodeResponse = ScannedBarcodeResponse(scan)
@@ -268,19 +272,6 @@ func routes(_ app: Application) async throws {
             \(scan)
             """
         )
-
-        // let response: Response
-        // switch format {
-        //     case .barcodeOnly:
-        //         response = try await scannedBarcodeResponse
-        //             .barcode
-        //             .encodeResponse(for: req)
-        //     case .json:
-        //         response = try await scannedBarcodeResponse
-        //             .encodeResponse(for: req)
-        // }
-
-        // return response
 
         let response = Response()
         switch format {
