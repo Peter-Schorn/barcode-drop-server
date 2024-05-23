@@ -12,7 +12,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.1.16)"
+        let message = "success (version 0.2.2)"
         req.logger.info("\(message)")
         return message
     }
@@ -103,6 +103,8 @@ func routes(_ app: Application) async throws {
             throw postBarcodeError
         }
     }
+
+    // MARK: - GET -
 
     // MARK: GET /scans
     //
@@ -313,6 +315,57 @@ func routes(_ app: Application) async throws {
 
     }
 
+    // MARK: - DELETE -
+
+    // MARK: Delete /all-scans
+
+    app.delete("all-scans") { req async throws -> String in
+
+        req.logger.info("====== deleting all barcodes ======")
+
+        let result = try await barcodesCollection.deleteAll(where: [:])
+
+        req.logger.info("delete result: \(result)")
+
+        return "====== deleted all barcodes ======"
+
+    }
+
+    // MARK: DELETE /all-scans/except-last?n=<n>
+    //
+    app.delete("all-scans", "except-last") { req async throws -> String in
+
+        let n: Int = req.query["n"] ?? 5
+
+        req.logger.info(
+            "deleting all barcodes except the last \(n) scans"
+        )
+
+        let lastScans: [ScannedBarcode] = try await barcodesCollection
+            .find()
+            .sort(["date": -1])
+            .limit(n)
+            .decode(ScannedBarcode.self)
+            .drain()
+
+        let lastScanIDs = lastScans.map { $0._id }
+
+        req.logger.info(
+            "last \(n) scans: \(lastScans)"
+        )
+
+        let result = try await barcodesCollection.deleteAll(
+            where: "_id" != ["$in": lastScanIDs]
+        )
+
+        req.logger.info(
+            "delete result: \(result) (except last \(n) scans)"
+        )
+
+        return "deleted all barcodes except the last \(n) scans"
+
+    }
+
     // MARK: DELETE /scans/:user
     //
     // Deletes all scanned barcodes for a user from the database.
@@ -336,56 +389,107 @@ func routes(_ app: Application) async throws {
     
     }
 
+    // MARK: DELETE /scans/:user/except-last?n=<n>
+    //
+    app.delete("scans", ":user", "except-last") { req async throws -> String in
+
+        let user = req.parameters.get("user")
+
+        let n: Int = req.query["n"] ?? 5
+
+        req.logger.info(
+            "deleting all barcodes except the last \(n) scans for user: \(user ?? "nil")"
+        )
+
+        let lastScans: [ScannedBarcode] = try await barcodesCollection
+            .find("user" == user)
+            .sort(["date": -1])
+            .limit(n)
+            .decode(ScannedBarcode.self)
+            .drain()
+
+        let lastScanIDs = lastScans.map { $0._id }
+
+        req.logger.info(
+            "last \(n) scans for user \(user ?? "nil"): \(lastScans)"
+        )
+
+        let result = try await barcodesCollection.deleteAll(
+            where: "user" == user && "_id" != ["$in": lastScanIDs]
+        )
+
+        req.logger.info(
+            """
+            delete result for user \(user ?? "nil"), \
+            except last \(n) scans: \(result)
+            """
+        )
+
+        return """
+            deleted all barcodes except the last \(n) scans for user: \
+            \(user ?? "nil")
+            """
+
+    }
+
     // MARK: DELETE /scans
     //
-    // Deletes scanned barcodes by id from the database.
+    // Deletes scanned barcodes by id and/or user from the database.
     //
-    // Request body: ["<id1>", "<id2>", ...]
+    // Request body: ["<id1>", "<id2>", ...] or
+    // { "ids": ["<id1>", "<id2>", ...], users: ["<user1>", "<user2>", ...]}
+    // where the `users` parameter is optional
     // 
-    // Or, as a URL query parameter: a comma separated list:
-    // /scans?ids=<id1>,<id2>...
+    // Or, as URL query parameters: a comma separated list:
+    // /scans?ids=<id1>,<id2>...&users=<user1>,<user2>...
+    //
     app.delete("scans") { req async throws -> String in
 
-        let ids: [String] = try Result { 
-            try req.content.decode([String].self, as: .json)
+        let deleteScansRequest: DeleteScansRequestBody = try Result { 
+            try req.content.decode(DeleteScansRequestBody.self)
         }
-        .flatMapErrorThrowing({ error -> [String] in
+        
+        .flatMapErrorThrowing({ error -> DeleteScansRequestBody in
             req.logger.info(
                 """
                 could not decode request body as JSON: \(error)
                 """
             )
-            return try req.query.get([String].self, at: "ids")
+            return try req.query.decode(DeleteScansRequestBody.self)
         })
         .mapError({ error -> Error in
             req.logger.info(
-                "could not decode request query parameter 'ids': \(error)"
+                "could not decode request query parameters: \(error)"
             )
             return error
         })
         .get()
 
         req.logger.info(
-            "deleting barcodes with ids: \(ids)"
+            "deleting barcodes for: \(deleteScansRequest)"
         )
 
-        if ids.isEmpty {
+        if deleteScansRequest.ids.isEmpty {
             throw Abort(.badRequest)
         }
         
+        let objectIDs = deleteScansRequest.ids
+            .compactMap({ ObjectId($0)?.description })
+
         let result = try await barcodesCollection.deleteAll(
             where: [
-                "_id": [
-                    "$in": ids.compactMap { ObjectId($0) }
+                "$or": [
+                    ["_id": ["$in": objectIDs]],
+                    ["user": ["$in": deleteScansRequest.users]]
                 ]
             ]
         )
 
         req.logger.info(
-            "delete result: \(result) (ids: \(ids))"
+            "delete result: \(result) (request: \(deleteScansRequest)"
         )
 
-        return "deleted barcodes with ids: \(ids)"
+        return "deleted barcodes:: \(deleteScansRequest)"
 
     }
 
