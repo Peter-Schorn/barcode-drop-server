@@ -434,7 +434,7 @@ func routes(_ app: Application) async throws {
     //
     // Request body: ["<id1>", "<id2>", ...] or
     // { "ids": ["<id1>", "<id2>", ...], users: ["<user1>", "<user2>", ...]}
-    // where the `users` parameter is optional
+    // where at least one of `ids` or `users` must be present.
     // 
     // Or, as URL query parameters: a comma separated list:
     // /scans?ids=<id1>,<id2>...&users=<user1>,<user2>...
@@ -444,7 +444,6 @@ func routes(_ app: Application) async throws {
         let deleteScansRequest: DeleteScansRequestBody = try Result { 
             try req.content.decode(DeleteScansRequestBody.self)
         }
-        
         .flatMapErrorThrowing({ error -> DeleteScansRequestBody in
             req.logger.info(
                 """
@@ -454,7 +453,7 @@ func routes(_ app: Application) async throws {
             return try req.query.decode(DeleteScansRequestBody.self)
         })
         .mapError({ error -> Error in
-            req.logger.info(
+            req.logger.error(
                 "could not decode request query parameters: \(error)"
             )
             return error
@@ -465,20 +464,26 @@ func routes(_ app: Application) async throws {
             "deleting barcodes for: \(deleteScansRequest)"
         )
 
-        if deleteScansRequest.ids.isEmpty {
-            throw Abort(.badRequest)
-        }
-        
         let objectIDs = deleteScansRequest.ids
-            .compactMap({ ObjectId($0)?.description })
+            // .compactMap({ ObjectId($0) })
+            .compactMap({ ObjectId($0) })
+
+        req.logger.info(
+            "objectIDs: \(objectIDs)"
+        )
+
+        let idDoc: Document = ["_id": ["$in": objectIDs]]
+        let userDoc: Document = ["user": ["$in": deleteScansRequest.users]]
+
+        let doc: Document = [
+            "$or": [
+                idDoc,
+                userDoc
+            ]
+        ]
 
         let result = try await barcodesCollection.deleteAll(
-            where: [
-                "$or": [
-                    ["_id": ["$in": objectIDs]],
-                    ["user": ["$in": deleteScansRequest.users]]
-                ]
-            ]
+            where: doc
         )
 
         req.logger.info(
@@ -486,6 +491,8 @@ func routes(_ app: Application) async throws {
         )
 
         return "deleted barcodes:: \(deleteScansRequest)"
+
+        // fatalError("not implemented")
 
     }
 
@@ -580,6 +587,9 @@ func routes(_ app: Application) async throws {
         }
 
         let onlyLatest: Bool = req.query["only-latest"] ?? false
+
+        // TODO: Remove this line
+        let _ = onlyLatest
 
         req.logger.info("websocket connected for user: \(user)")
 
