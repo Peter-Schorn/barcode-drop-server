@@ -496,8 +496,8 @@ func routes(_ app: Application) async throws {
     }
 
     // MARK: DELETE /all-scans/older?t=<seconds>
-    // We need a method for deleting all older scans.
-    // Cannot conflict with other routes.
+    // Deletes all scans for all users older than a specified number of seconds
+    // from the database. The default is 300 seconds (5 minutes).
     app.delete("all-scans", "older") { req async throws -> String in
 
         req.logger.info(
@@ -517,7 +517,10 @@ func routes(_ app: Application) async throws {
         } ?? 300  // DEFAULT: 300 seconds (5 minutes)
 
         req.logger.info(
-            "deleting barcodes older than \(seconds) seconds for all users"
+            """
+            deleting barcodes scanned more than \(seconds) seconds ago for all \
+            users
+            """
         )
 
         let date = Date().addingTimeInterval(TimeInterval(-seconds))
@@ -528,13 +531,15 @@ func routes(_ app: Application) async throws {
 
         req.logger.info(
             """
-            delete result for all users older than \(seconds) seconds: \
+            delete result for all barcodes scanned more than \(seconds) \
+            seconds ago for all users: \
             \(result)
             """
         )
 
         return """
-            deleted barcodes older than \(seconds) seconds for all users
+            deleted barcodes scanned more than \(seconds) seconds ago for all \
+            users
             """
 
     }
