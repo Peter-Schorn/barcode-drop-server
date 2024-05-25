@@ -17,7 +17,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.2.2)"
+        let message = "success (version 0.3.0)"
         req.logger.info("\(message)")
         return message
     }
@@ -314,7 +314,6 @@ func routes(_ app: Application) async throws {
     // MARK: - DELETE -
 
     // MARK: Delete /all-scans
-
     app.delete("all-scans") { req async throws -> String in
 
         req.logger.info("====== deleting all barcodes ======")
@@ -496,9 +495,50 @@ func routes(_ app: Application) async throws {
 
     }
 
-    // TODO: DELETE /all-scans/older?t=<seconds>
+    // MARK: DELETE /all-scans/older?t=<seconds>
     // We need a method for deleting all older scans.
     // Cannot conflict with other routes.
+    app.delete("all-scans", "older") { req async throws -> String in
+
+        req.logger.info(
+            "\(req.route?.description ?? "couldn't get route description")"
+        )
+
+        let seconds = try req.query["t"].flatMap { secondsString throws -> Int in
+            guard let int = Int(secondsString) else {
+                req.logger.error(
+                    """
+                    could not convert secondsString '\(secondsString)' to Int
+                    """
+                )
+                throw Abort(.badRequest)
+            }
+            return int
+        } ?? 300  // DEFAULT: 300 seconds (5 minutes)
+
+        req.logger.info(
+            "deleting barcodes older than \(seconds) seconds for all users"
+        )
+
+        let date = Date().addingTimeInterval(TimeInterval(-seconds))
+
+        let result = try await barcodesCollection.deleteAll(
+            where: "date" < date
+        )
+
+        req.logger.info(
+            """
+            delete result for all users older than \(seconds) seconds: \
+            \(result)
+            """
+        )
+
+        return """
+            deleted barcodes older than \(seconds) seconds for all users
+            """
+
+    }
+
 
     // MARK: DELETE /scans/<user>/older?t=<seconds>
     //
