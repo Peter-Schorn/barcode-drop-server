@@ -31,11 +31,11 @@ public func configure(_ app: Application) async throws {
         ]
     )
 
-    let cors = CORSMiddleware(configuration: corsConfiguration)
+    let corsMiddleware = CORSMiddleware(configuration: corsConfiguration)
 
     // cors middleware should come before default error middleware 
     // using `at: .beginning`
-    app.middleware.use(cors, at: .beginning)
+    app.middleware.use(corsMiddleware, at: .beginning)
 
     // ---
 
