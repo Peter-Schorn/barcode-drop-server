@@ -609,47 +609,69 @@ func routes(_ app: Application) async throws {
     // WebSocket /watch/:user
     //
     // 
-    app.webSocket("watch", ":user") { req, ws in
+    // app.webSocket("watch", ":user") { req, ws in
 
-        // let x = req.fileio.st
+    //     guard let user = req.parameters.get("user") else {
+    //         do {
+    //             try await ws.send("invalid user")
+    //         } catch {
+    //             req.logger.error(
+    //                 "could not send invalid user message: \(error)"
+    //             )
+    //         }
+    //         do {
+    //             try await ws.close()
+    //         } catch {
+    //             req.logger.error(
+    //                 "could not close websocket: \(error)"
+    //             )
+    //         }
+    //         return
+    //     }
 
-        guard let user = req.parameters.get("user") else {
-            do {
-                try await ws.send("invalid user")
-            } catch {
-                req.logger.error(
-                    "could not send invalid user message: \(error)"
-                )
-            }
-            do {
-                try await ws.close()
-            } catch {
-                req.logger.error(
-                    "could not close websocket: \(error)"
-                )
-            }
-            return
-        }
+    //     let onlyLatest: Bool = req.query["only-latest"] ?? false
 
-        let onlyLatest: Bool = req.query["only-latest"] ?? false
+    //     // TODO: Remove this line
+    //     let _ = onlyLatest
 
-        // TODO: Remove this line
-        let _ = onlyLatest
+    //     req.logger.info("websocket connected for user: \(user)")
 
-        req.logger.info("websocket connected for user: \(user)")
+    //      // handle incoming messages
+    //     ws.onText { ws, text in
+    //         req.logger.info("received text for user '\(user)': \(text)")
+    //     }
 
-         // handle incoming messages
+    //     // handle websocket disconnect
+    //     ws.onClose.whenComplete { _ in
+    //         req.logger.info("websocket disconnected for user: \(user)")
+    //     }
 
-        ws.onText { ws, text in
-            req.logger.info("received text for user '\(user)': \(text)")
-        }
+    //     ws.onPing({ socket, buffer in
+    //         req.logger.info("received ping")
+    //     })
 
-        // handle websocket disconnect
-        ws.onClose.whenComplete { _ in
-            req.logger.info("websocket disconnected for user: \(user)")
-        }
+    //     ws.onPong({ socket, buffer in
+    //         req.logger.info("received pong")
+    //     })
 
-        let changeStream: ChangeStream<ScannedBarcode>
+    //     do {
+    //         try await Task.sleep(for: .seconds(10))
+        
+    //         req.logger.info("sending message to websocket")
+    //         try await ws.send("this is some text sent from the web socket")
+    //         req.logger.info("sent message to websocket")
+
+    //         req.logger.info("sending *ANOTHER* message to websocket")
+    //         try await ws.send("this is some text sent from the web socket")
+    //         req.logger.info("sent *ANOTHER* message to websocket")
+
+    //     } catch let wsError {
+    //         req.logger.error(
+    //             "web socket error: \(wsError)"
+    //         )
+    //     }
+
+        // let changeStream: ChangeStream<ScannedBarcode>
 
         // do {
 
