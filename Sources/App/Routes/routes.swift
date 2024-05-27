@@ -651,72 +651,72 @@ func routes(_ app: Application) async throws {
 
         let changeStream: ChangeStream<ScannedBarcode>
 
-        do {
+        // do {
 
-            changeStream = try await barcodesCollection.buildChangeStream(
-                options: { 
-                    var options = ChangeStreamOptions()
-                    options.fullDocument = .required
-                    return options
-                }(),
-                ofType: ScannedBarcode.self,
-                build: {
-                    Match(where: "fullDocument.user" == user)
-                }
-            )
-            req.logger.info("created watch stream for user: \(user)")
+        //     changeStream = try await barcodesCollection.buildChangeStream(
+        //         options: { 
+        //             var options = ChangeStreamOptions()
+        //             options.fullDocument = .required
+        //             return options
+        //         }(),
+        //         ofType: ScannedBarcode.self,
+        //         build: {
+        //             Match(where: "fullDocument.user" == user)
+        //         }
+        //     )
+        //     req.logger.info("created watch stream for user: \(user)")
 
-        } catch {
-            req.logger.error(
-                """
-                could not create watch stream for user \(user): \(error)
-                """
-            )
-            return
-        }
+        // } catch {
+        //     req.logger.error(
+        //         """
+        //         could not create watch stream for user \(user): \(error)
+        //         """
+        //     )
+        //     return
+        // }
 
         // handle change stream notifications
-        do {
+        // do {
 
-            for try await notification in changeStream {
+        //     for try await notification in changeStream {
                 
-                req.logger.info(
-                    """
-                    received change stream notification for user \(user): 
-                    \(notification)
-                    """
-                )
+        //         req.logger.info(
+        //             """
+        //             received change stream notification for user \(user): 
+        //             \(notification)
+        //             """
+        //         )
                 
-                do {
-                    // MARK: Send Refresh Message
+        //         do {
+        //             // MARK: Send Refresh Message
 
-                    try await ws.send("refresh notification: \(notification)")
-                    req.logger.info(
-                        """
-                        sent refresh message to user: \(user) \
-                        with notification: \(notification)
-                        """
-                    )
-                    // client should make a request to GET /scans to get the  
-                    // updated list
-                } catch {
-                    req.logger.error(
-                        """
-                        could not send refresh message to user \(user): \
-                        \(error)
-                        """
-                    )
-                }
+        //             try await ws.send("refresh notification: \(notification)")
+        //             req.logger.info(
+        //                 """
+        //                 sent refresh message to user: \(user) \
+        //                 with notification: \(notification)
+        //                 """
+        //             )
+        //             // client should make a request to GET /scans to get the  
+        //             // updated list
+        //         } catch {
+        //             req.logger.error(
+        //                 """
+        //                 could not send refresh message to user \(user): \
+        //                 \(error)
+        //                 """
+        //             )
+        //         }
 
-            }
-        } catch {
-            req.logger.error(
-                """
-                error handling change stream notification for user \
-                \(user): \(error)
-                """
-            )
-        }
+        //     }
+        // } catch {
+        //     req.logger.error(
+        //         """
+        //         error handling change stream notification for user \
+        //         \(user): \(error)
+        //         """
+        //     )
+        // }
 
 
     }
