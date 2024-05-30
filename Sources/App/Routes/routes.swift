@@ -606,6 +606,39 @@ func routes(_ app: Application) async throws {
 
     // MARK: - Web Sockets -
 
+    app.webSocket("ws-test") { req, ws in 
+            
+        req.logger.info("websocket connected")
+
+        // handle incoming messages
+        ws.onText { ws, text in
+            req.logger.info("received text: \(text)")
+        }
+
+        // handle websocket disconnect
+        ws.onClose.whenComplete { _ in
+            req.logger.info("websocket disconnected")
+        }
+
+         do {
+        //     try await Task.sleep(for: .seconds(10))
+        
+            req.logger.info("sending message to websocket")
+            try await ws.send("this is some text sent from the web socket")
+            req.logger.info("sent message to websocket")
+
+        //     req.logger.info("sending *ANOTHER* message to websocket")
+        //     try await ws.send("this is some text sent from the web socket")
+        //     req.logger.info("sent *ANOTHER* message to websocket")
+
+        } catch let wsError {
+            req.logger.error(
+                "web socket error: \(wsError)"
+            )
+        }
+           
+    }
+
     // WebSocket /watch/:user
     //
     // 
@@ -654,22 +687,24 @@ func routes(_ app: Application) async throws {
     //         req.logger.info("received pong")
     //     })
 
-    //     do {
-    //         try await Task.sleep(for: .seconds(10))
+        // do {
+        //     try await Task.sleep(for: .seconds(10))
         
-    //         req.logger.info("sending message to websocket")
-    //         try await ws.send("this is some text sent from the web socket")
-    //         req.logger.info("sent message to websocket")
+        //     req.logger.info("sending message to websocket")
+        //     try await ws.send("this is some text sent from the web socket")
+        //     req.logger.info("sent message to websocket")
 
-    //         req.logger.info("sending *ANOTHER* message to websocket")
-    //         try await ws.send("this is some text sent from the web socket")
-    //         req.logger.info("sent *ANOTHER* message to websocket")
+        //     req.logger.info("sending *ANOTHER* message to websocket")
+        //     try await ws.send("this is some text sent from the web socket")
+        //     req.logger.info("sent *ANOTHER* message to websocket")
 
-    //     } catch let wsError {
-    //         req.logger.error(
-    //             "web socket error: \(wsError)"
-    //         )
-    //     }
+        // } catch let wsError {
+        //     req.logger.error(
+        //         "web socket error: \(wsError)"
+        //     )
+        // }
+
+    // }
 
         // let changeStream: ChangeStream<ScannedBarcode>
 
