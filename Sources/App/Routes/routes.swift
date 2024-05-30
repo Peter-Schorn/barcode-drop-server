@@ -600,44 +600,50 @@ func routes(_ app: Application) async throws {
 
     // MARK: - Streaming -
     
-    // MARK: GET /scans/:user/tail    
+    // TODO: GET /scans/:user/tail    
     // tails scans from user: server sends continuous stream of scanned barcodes
     // to the client
 
     // MARK: - Web Sockets -
 
-    app.webSocket("ws-test") { req, ws in 
+    // MARK: WebSocket /ws-test
+    //
+    // A test websocket route that sends a message to the client when the
+    // connection is established.
+    // app.webSocket("ws-test") { req, ws in 
             
-        req.logger.info("websocket connected")
+    //     req.logger.info("websocket connected")
 
-        // handle incoming messages
-        ws.onText { ws, text in
-            req.logger.info("received text: \(text)")
-        }
+    //     // handle incoming messages
+    //     ws.onText { ws, text in
+    //         req.logger.info("received text: \(text)")
+            
+    //         ws.send(#"echoing back: "\#(text)""#)
+    //     }
 
-        // handle websocket disconnect
-        ws.onClose.whenComplete { _ in
-            req.logger.info("websocket disconnected")
-        }
+    //     // handle websocket disconnect
+    //     ws.onClose.whenComplete { _ in
+    //         req.logger.info("websocket disconnected")
+    //     }
 
-         do {
-        //     try await Task.sleep(for: .seconds(10))
-        
-            req.logger.info("sending message to websocket")
-            try await ws.send("this is some text sent from the web socket")
-            req.logger.info("sent message to websocket")
-
-        //     req.logger.info("sending *ANOTHER* message to websocket")
-        //     try await ws.send("this is some text sent from the web socket")
-        //     req.logger.info("sent *ANOTHER* message to websocket")
-
-        } catch let wsError {
-            req.logger.error(
-                "web socket error: \(wsError)"
-            )
-        }
+    //     //  do {
+    //     // //     try await Task.sleep(for: .seconds(10))
+    //     //
+    //     //     req.logger.info("sending message to websocket")
+    //     //     try await ws.send("this is some text sent from the web socket")
+    //     //     req.logger.info("sent message to websocket")
+    //     //
+    //     // //     req.logger.info("sending *ANOTHER* message to websocket")
+    //     // //     try await ws.send("this is some text sent from the web socket")
+    //     // //     req.logger.info("sent *ANOTHER* message to websocket")
+    //     //
+    //     // } catch let wsError {
+    //     //     req.logger.error(
+    //     //         "web socket error: \(wsError)"
+    //     //     )
+    //     // }
            
-    }
+    // }
 
     // WebSocket /watch/:user
     //
