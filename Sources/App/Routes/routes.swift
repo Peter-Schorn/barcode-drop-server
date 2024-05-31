@@ -6,6 +6,7 @@ func routes(_ app: Application) async throws {
 
     // MARK: Initialize Database
 
+
     let barcodesCollection = app.mongo["barcodes"]
 
     // let scanStreamCollection = ScanStreamCollection(
@@ -17,7 +18,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.3.2)"
+        let message = "success (version 0.3.3)"
         req.logger.info("\(message)")
         return message
     }
