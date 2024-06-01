@@ -6,6 +6,9 @@ enum ScansOption: String, Sendable, Codable {
     case barcodesOnly = "barcodes-only"
     case json
 
+    // case jsonPretty = "json-pretty"
+    // case jsonMinified = "json-minified"
+
     static let defaultValue: Self = .json
 
     init(from decoder: Decoder) throws {

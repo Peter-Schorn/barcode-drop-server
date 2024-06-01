@@ -169,6 +169,9 @@ func routes(_ app: Application) async throws {
     app.post("scan", ":user") { req async throws -> String in
         do {
 
+            // the date the barcode was received by the server
+            let date = Date()
+
             let user = req.parameters.get("user")
 
             let scan: ScanRequestBody = try Result<ScanRequestBody, Error>{
@@ -211,7 +214,7 @@ func routes(_ app: Application) async throws {
                 _id: ObjectId(),
                 barcode: scan.barcode,
                 user: user,
-                date: Date()  // save date barcode was scanned to the database
+                date: date // save date barcode was scanned to the database
             )
 
             // insert the scanned barcode into the database
