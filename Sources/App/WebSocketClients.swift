@@ -28,12 +28,12 @@ class WebsocketClients: @unchecked Sendable {
 
         self.storage[client.id] = client
 
-         // handle incoming messages
+        //  handle incoming messages
         client.socket.onText { [weak self] ws, text in
             
             self?.logger.info(#"received text: "\#(text)""#)
             
-            ws.send(#"echoing back: "\#(text)""#)
+            // ws.send(#"echoing back: "\#(text)""#)
         }
 
         // handle websocket disconnect

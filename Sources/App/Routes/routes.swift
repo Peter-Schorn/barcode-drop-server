@@ -143,7 +143,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.3.3)"
+        let message = "success (version 0.3.4)"
         req.logger.info("\(message)")
         return message
     }
@@ -783,9 +783,6 @@ func routes(_ app: Application) async throws {
             return
         }
 
-        req.logger.info(
-            "websocket connected for user: \(user)"
-        )
 
         let client = WebSocketClient(
             id: UUID(),
@@ -794,6 +791,13 @@ func routes(_ app: Application) async throws {
         )
 
         webSocketClients.add(client)
+
+        req.logger.info(
+            """
+            websocket connected for user: \(user) \
+            (client.id: \(client.id))
+            """
+        )
 
     }
 
