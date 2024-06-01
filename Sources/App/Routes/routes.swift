@@ -27,6 +27,7 @@ func routes(_ app: Application) async throws {
                 options: { () -> MongoKitten.ChangeStreamOptions in
                     var options = ChangeStreamOptions()
                     options.fullDocument = .required
+                    options.fullDocumentBeforeChange = .required
                     return options
                 }(),
                 ofType: ScannedBarcode.self,
@@ -59,32 +60,55 @@ func routes(_ app: Application) async throws {
                     )
 
                     if 
-                        let document = notification.fullDocument, 
-                        let user = document.user 
+                        let document = notification.fullDocument 
+                                ?? notification.fullDocumentBeforeChange,
+                        let user = document.user
                     {
+                    // if let user = (notification.fullDocument ?? notification.fullDocumentBeforeChange)?.user {
                         for client in webSocketClients.active {
                             if client.user == user {
 
                                 app.logger.info(
                                     """
-                                    notification applies to user: \(user) \
-                                    (client.id: \(client.id))
+                                    notification applies to user \(user) \
+                                    (client.id: \(client.id)): \(notification)
                                     """
                                 )
 
                                 if notification.operationType == .insert {
-                                    app.logger.info(
-                                        """
-                                        sending insertNewScan message to user: \
-                                        \(user)
-                                        """
-                                    )
 
                                     let insertNewScan = InsertNewScan(
                                         document
                                     )
+
+                                    app.logger.info(
+                                        """
+                                        sending insertNewScan message to user \
+                                        \(user) (client.id: \(client.id)): \(insertNewScan) 
+                                        """
+                                    )
+
                                     try await client.socket.sendJSON(
                                         insertNewScan
+                                    )
+
+                                }
+                                else if notification.operationType == .delete {
+
+                                    let deleteScan = DeleteScan(
+                                        document._id.hexString
+                                    )
+
+                                    app.logger.info(
+                                        """
+                                        sending deleteScan message to user \
+                                        \(user) (client.id: \(client.id)): \
+                                        \(deleteScan)
+                                        """
+                                    )
+
+                                    try await client.socket.sendJSON(
+                                        deleteScan
                                     )
 
                                 }

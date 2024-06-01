@@ -13,8 +13,10 @@ let package = Package(
             from: "4.92.4"
         ),
         .package(
-            url: "https://github.com/orlandos-nl/MongoKitten.git", 
-            from: "7.2.0"
+            // url: "https://github.com/orlandos-nl/MongoKitten.git", 
+            // from: "7.2.0"
+            url: "https://github.com/Peter-Schorn/MongoKitten.git",
+            branch: "full-document-before-change"
         )
     ],
     targets: [

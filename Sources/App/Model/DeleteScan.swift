@@ -4,34 +4,25 @@ import MongoKitten
 
 /**
  Represents the message sent from the server to the client via a WebSocket
- connection to insert a new scan into the database.
+ connection to delete a scan from the database.
 
  Example JSON:
 
  {    
-     type: "insertNewScan",
-     newScan: {
-         barcode: "1234567890",
-         user: "schornpe",
-         id: "123e4567-e89b-12d3-a456-426614174000",
-         date: "2021-08-01T12:00:00Z"
-     }   
+     type: "deleteScan",
+     id: "123e4567-e89b-12d3-a456-426614174000"
  }      
  */
-struct InsertNewScan: Sendable, Content {
+struct DeleteScan: Sendable, Content {
 
-    static let type = "insertNewScan"
+    static let type = "deleteScan"
 
     static let defaultContentType: HTTPMediaType = .json
 
-    let newScan: ScannedBarcodeResponse
+    let id: String
 
-    init(_ newScan: ScannedBarcodeResponse) {
-        self.newScan = newScan
-    }
-
-    init(_ newScan: ScannedBarcode) {
-        self.init(ScannedBarcodeResponse(newScan))
+    init(_ id: String) {
+        self.id = id
     }
 
     init(from decoder: Decoder) throws {
@@ -54,9 +45,9 @@ struct InsertNewScan: Sendable, Content {
 
         }
 
-        self.newScan = try container.decode(
-            ScannedBarcodeResponse.self, 
-            forKey: .newScan
+        self.id = try container.decode(
+            String.self, 
+            forKey: .id
         )
 
     }
@@ -64,12 +55,12 @@ struct InsertNewScan: Sendable, Content {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(Self.type, forKey: .type)
-        try container.encode(self.newScan, forKey: .newScan)
+        try container.encode(self.id, forKey: .id)
     }
 
     enum CodingKeys: String, CodingKey {
         case type
-        case newScan
+        case id
     }
 
 }
