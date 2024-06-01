@@ -1,4 +1,5 @@
 import Foundation
+import WebSocketKit
 
 extension Result {
 
@@ -24,5 +25,26 @@ extension JSONEncoder {
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }()
+
+    static let iso8601: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+}
+
+extension WebSocket {
+
+    func sendJSON<T: Encodable>(
+        _ value: T,
+        using encoder: JSONEncoder = .iso8601
+    ) async throws {
+
+        let data = try encoder.encode(value)
+        try await send(raw: data, opcode: .text)
+
+    }
+
 
 }

@@ -14,6 +14,107 @@ func routes(_ app: Application) async throws {
     // )
     // try app.register(collection: scanStreamCollection)
 
+    let webSocketClients = WebsocketClients(eventLoop: app.eventLoopGroup.next())
+
+    // MARK: - Change Streams -
+    // let changeStream = try await barcodesCollection.watch()
+
+    let changeStream: ChangeStream<ScannedBarcode>
+
+        do {
+
+            changeStream = try await barcodesCollection.buildChangeStream(
+                options: { () -> MongoKitten.ChangeStreamOptions in
+                    var options = ChangeStreamOptions()
+                    options.fullDocument = .required
+                    return options
+                }(),
+                ofType: ScannedBarcode.self,
+                build: {
+                    // Match(where: "fullDocument.user" == user)
+                }
+            )
+            app.logger.info(
+                "created app-level change stream"
+            )
+
+        } catch {
+            app.logger.error(
+                """
+                could not create app-level change stream: \(error)
+                """
+            )
+            return
+        }
+
+        // handle change stream notifications
+        Task.detached(operation: {
+            do {
+                for try await notification in changeStream {
+                    app.logger.info(
+                        """
+                        app-level change stream received notification: 
+                        \(notification)
+                        """
+                    )
+
+                    if 
+                        let document = notification.fullDocument, 
+                        let user = document.user 
+                    {
+                        for client in webSocketClients.active {
+                            if client.user == user {
+
+                                app.logger.info(
+                                    """
+                                    notification applies to user: \(user) \
+                                    (client.id: \(client.id))
+                                    """
+                                )
+
+                                if notification.operationType == .insert {
+                                    app.logger.info(
+                                        """
+                                        sending insertNewScan message to user: \
+                                        \(user)
+                                        """
+                                    )
+
+                                    let insertNewScan = InsertNewScan(
+                                        document
+                                    )
+                                    try await client.socket.sendJSON(
+                                        insertNewScan
+                                    )
+
+                                }
+                                else {
+                                    app.logger.info(
+                                        """
+                                        RECEIVED ANOTHER OPERATION TYPE: \
+                                        \(notification.operationType)
+                                        """
+                                    )
+                                }
+
+                            }
+                        }
+                    }
+                }
+            } catch {
+                app.logger.error(
+                    """
+                    error handling change stream notification: \(error)
+                    """
+                )
+            }
+        })
+
+        
+    // MARK: - Routes -
+
+    app.logger.info("setting up routes")
+
     // MARK: GET /
     //
     // Returns a success message with the version string.
@@ -615,175 +716,61 @@ func routes(_ app: Application) async throws {
             
     //     req.logger.info("websocket connected")
 
-    //     // handle incoming messages
-    //     ws.onText { ws, text in
-    //         req.logger.info("received text: \(text)")
-            
-    //         ws.send(#"echoing back: "\#(text)""#)
-    //     }
+    //     webSocketClients.add(WebSocketClient(id: UUID(), user: "peter", socket: ws))
 
-    //     // handle websocket disconnect
-    //     ws.onClose.whenComplete { _ in
-    //         req.logger.info("websocket disconnected")
-    //     }
-
-    //     //  do {
-    //     // //     try await Task.sleep(for: .seconds(10))
+    //     // do {
+    //     // // try await Task.sleep(for: .seconds(10))
     //     //
-    //     //     req.logger.info("sending message to websocket")
-    //     //     try await ws.send("this is some text sent from the web socket")
-    //     //     req.logger.info("sent message to websocket")
-    //     //
-    //     // //     req.logger.info("sending *ANOTHER* message to websocket")
-    //     // //     try await ws.send("this is some text sent from the web socket")
-    //     // //     req.logger.info("sent *ANOTHER* message to websocket")
-    //     //
+    //     // req.logger.info("sending message to websocket")
+    //     // try await ws.send("this is some text sent from the web socket")
+    //     // req.logger.info("sent message to websocket")
+    //     // 
+    //     // // req.logger.info("sending *ANOTHER* message to websocket")
+    //     // // try await ws.send("this is some text sent from the web socket")
+    //     // // req.logger.info("sent *ANOTHER* message to websocket")
+    //     // 
     //     // } catch let wsError {
     //     //     req.logger.error(
     //     //         "web socket error: \(wsError)"
     //     //     )
     //     // }
-           
+
     // }
 
     // WebSocket /watch/:user
     //
     // 
-    // app.webSocket("watch", ":user") { req, ws in
-
-    //     guard let user = req.parameters.get("user") else {
-    //         do {
-    //             try await ws.send("invalid user")
-    //         } catch {
-    //             req.logger.error(
-    //                 "could not send invalid user message: \(error)"
-    //             )
-    //         }
-    //         do {
-    //             try await ws.close()
-    //         } catch {
-    //             req.logger.error(
-    //                 "could not close websocket: \(error)"
-    //             )
-    //         }
-    //         return
-    //     }
-
-    //     let onlyLatest: Bool = req.query["only-latest"] ?? false
-
-    //     // TODO: Remove this line
-    //     let _ = onlyLatest
-
-    //     req.logger.info("websocket connected for user: \(user)")
-
-    //      // handle incoming messages
-    //     ws.onText { ws, text in
-    //         req.logger.info("received text for user '\(user)': \(text)")
-    //     }
-
-    //     // handle websocket disconnect
-    //     ws.onClose.whenComplete { _ in
-    //         req.logger.info("websocket disconnected for user: \(user)")
-    //     }
-
-    //     ws.onPing({ socket, buffer in
-    //         req.logger.info("received ping")
-    //     })
-
-    //     ws.onPong({ socket, buffer in
-    //         req.logger.info("received pong")
-    //     })
-
-        // do {
-        //     try await Task.sleep(for: .seconds(10))
-        
-        //     req.logger.info("sending message to websocket")
-        //     try await ws.send("this is some text sent from the web socket")
-        //     req.logger.info("sent message to websocket")
-
-        //     req.logger.info("sending *ANOTHER* message to websocket")
-        //     try await ws.send("this is some text sent from the web socket")
-        //     req.logger.info("sent *ANOTHER* message to websocket")
-
-        // } catch let wsError {
-        //     req.logger.error(
-        //         "web socket error: \(wsError)"
-        //     )
-        // }
-
-    // }
-
-        // let changeStream: ChangeStream<ScannedBarcode>
-
-        // do {
-
-        //     changeStream = try await barcodesCollection.buildChangeStream(
-        //         options: { 
-        //             var options = ChangeStreamOptions()
-        //             options.fullDocument = .required
-        //             return options
-        //         }(),
-        //         ofType: ScannedBarcode.self,
-        //         build: {
-        //             Match(where: "fullDocument.user" == user)
-        //         }
-        //     )
-        //     req.logger.info("created watch stream for user: \(user)")
-
-        // } catch {
-        //     req.logger.error(
-        //         """
-        //         could not create watch stream for user \(user): \(error)
-        //         """
-        //     )
-        //     return
-        // }
-
-        // handle change stream notifications
-        // do {
-
-        //     for try await notification in changeStream {
-                
-        //         req.logger.info(
-        //             """
-        //             received change stream notification for user \(user): 
-        //             \(notification)
-        //             """
-        //         )
-                
-        //         do {
-        //             // MARK: Send Refresh Message
-
-        //             try await ws.send("refresh notification: \(notification)")
-        //             req.logger.info(
-        //                 """
-        //                 sent refresh message to user: \(user) \
-        //                 with notification: \(notification)
-        //                 """
-        //             )
-        //             // client should make a request to GET /scans to get the  
-        //             // updated list
-        //         } catch {
-        //             req.logger.error(
-        //                 """
-        //                 could not send refresh message to user \(user): \
-        //                 \(error)
-        //                 """
-        //             )
-        //         }
-
-        //     }
-        // } catch {
-        //     req.logger.error(
-        //         """
-        //         error handling change stream notification for user \
-        //         \(user): \(error)
-        //         """
-        //     )
-        // }
+    app.webSocket("watch", ":user") { req, ws in
 
 
-    // }
+        req.logger.info("Websocket /watch/:user: ws: \(ws)")
 
+        guard let user = req.parameters.get("user") else {
+            req.logger.error("could not get user parameter: \(req.url)")
+            Task.detached(operation: { 
+                do {
+                    try await ws.close()
+                } catch {
+                    req.logger.error(
+                        "could not close websocket: \(error)"
+                    )
+                }
+            })
+            return
+        }
+
+        req.logger.info(
+            "websocket connected for user: \(user)"
+        )
+
+        let client = WebSocketClient(
+            id: UUID(),
+            user: user,
+            socket: ws
+        )
+
+        webSocketClients.add(client)
+
+    }
 
 }
