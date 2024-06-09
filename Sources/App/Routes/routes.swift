@@ -3,15 +3,15 @@ import Logging
 import Vapor
 @preconcurrency import MongoKitten
 
-import AWSS3
-import ClientRuntime
-import AWSElasticBeanstalk
+// import AWSS3
+// import ClientRuntime
+// import AWSElasticBeanstalk
 
 func routes(_ app: Application) async throws {
 
     // MARK: - Initialize AWS -
-    let ebConfig = try await ElasticBeanstalkClient.ElasticBeanstalkClientConfiguration()
-    let elasticBeanstalkClient = ElasticBeanstalkClient(config: ebConfig)
+    // let ebConfig = try await ElasticBeanstalkClient.ElasticBeanstalkClientConfiguration()
+    // let elasticBeanstalkClient = ElasticBeanstalkClient(config: ebConfig)
     
     guard let backendEnvironmentID = ProcessInfo.processInfo
             .environment["BARCODE_DROP_BACKEND_ENVIRONMENT_ID"] else {
@@ -24,11 +24,11 @@ func routes(_ app: Application) async throws {
     }
 
     // MARK: - Protected Routes -
-    let protectedRoutes = ProtectedRoutes(
-        elasticBeanstalkClient: elasticBeanstalkClient,
-        backendEnvironmentID: backendEnvironmentID
-    )
-    try app.register(collection: protectedRoutes)
+    // let protectedRoutes = ProtectedRoutes(
+    //     elasticBeanstalkClient: elasticBeanstalkClient,
+    //     backendEnvironmentID: backendEnvironmentID
+    // )
+    // try app.register(collection: protectedRoutes)
 
     // let scanStreamCollection = ScanStreamCollection(
     //     collection: app.barcodesCollection
