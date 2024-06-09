@@ -180,7 +180,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.4.1)"
+        let message = "success (version 0.4.2)"
         req.logger.info("\(message)")
         return message
     }
