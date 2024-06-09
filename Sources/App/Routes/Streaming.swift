@@ -15,11 +15,11 @@ struct ScanStreamCollection: RouteCollection {
         // probably can't use route collection to use route I want, so use 
         // another means of encapsulating the streaming logic
 
-        let routes = routes.grouped("stream")
-        routes.get(
-            ":user", 
-            use: generateUserScanStream(req:)
-        )
+        // let routes = routes.grouped("stream")
+        // routes.get(
+        //     ":user", 
+        //     use: generateUserScanStream(req:)
+        // )
 
     }
     

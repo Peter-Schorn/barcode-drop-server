@@ -5,22 +5,23 @@ final class AppTests: XCTestCase {
     var app: Application!
     
     override func setUp() async throws {
-        self.app = Application(.testing)
-        try await configure(app)
+        self.app = try await Application.make(.testing)
+        try await configure(app) // Provide the missing argument
     }
     
     override func tearDown() async throws { 
-        self.app.shutdown()
+        try await self.app.asyncShutdown()
         self.app = nil
     }
     
     func testRootEndpoint() async throws {
-        try self.app.test(.GET, afterResponse: { res in
+        try await self.app.test(.GET, "/", afterResponse: { res async in
             XCTAssertEqual(res.status, .ok)
             XCTAssert(
-                res.body.string.startsWith("success"), 
+                res.body.string.starts(with: "success"), 
                 "response did not start with 'success': '\(res.body.string)'"
             )
         })
     }
+    
 }

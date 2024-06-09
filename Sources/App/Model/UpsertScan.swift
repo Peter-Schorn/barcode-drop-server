@@ -4,12 +4,12 @@ import MongoKitten
 
 /**
  Represents the message sent from the server to the client via a WebSocket
- connection to insert a new scan into the database.
+ connection to insert a new scan/update an existing scan.
 
  Example JSON:
 
  {    
-     type: "insertNewScan",
+     type: "upsertScan",
      newScan: {
          barcode: "1234567890",
          user: "schornpe",
@@ -18,9 +18,9 @@ import MongoKitten
      }   
  }      
  */
-struct InsertNewScan: Sendable, Content {
+struct UpsertScan: Sendable, Content {
 
-    static let type = "insertNewScan"
+    static let type = "upsertScan"
 
     static let defaultContentType: HTTPMediaType = .json
 

@@ -1,5 +1,8 @@
 import Foundation
 import WebSocketKit
+import Foundation
+import Vapor
+@preconcurrency import MongoKitten
 
 extension Result {
 
@@ -46,5 +49,26 @@ extension WebSocket {
 
     }
 
+
+}
+
+
+func makeAppChangeStream(
+    _ collection: MongoCollection
+) async throws -> ChangeStream<ScannedBarcode> {
+
+    return try await collection.buildChangeStream(
+        options: { () -> MongoKitten.ChangeStreamOptions in
+            var options = ChangeStreamOptions()
+            options.fullDocument = .required
+            options.fullDocumentBeforeChange = .required
+            return options
+        }(),
+        ofType: ScannedBarcode.self,
+        build: {
+            // match all users
+            // Match(where: "fullDocument.user" == user)
+        }
+    )
 
 }

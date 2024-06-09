@@ -1,7 +1,7 @@
 import Foundation
 import Vapor
 @preconcurrency import MongoKitten
-@preconcurrency import Meow
+// @preconcurrency import Meow
 
 // configures your application
 public func configure(_ app: Application) async throws {
@@ -40,7 +40,6 @@ public func configure(_ app: Application) async throws {
     // ---
 
     // MARK: Initialize Database
-
     guard let password = ProcessInfo.processInfo
             .environment["BARCODE_DROP_DATABASE_PASSWORD"] else {
         fatalError(
@@ -50,11 +49,23 @@ public func configure(_ app: Application) async throws {
             """
         )
     }
-
+    
     let connectionURI = "mongodb+srv://peter:\(password)@barcode-drop.w0gnolp.mongodb.net/Barcodes"
 
     try app.initializeMongoDB(connectionString: connectionURI)
 
+    // MARK: Initialize WebSocket Clients
+    app.webSocketClients = WebsocketClients(
+        eventLoop: app.eventLoopGroup.next()
+    )
+
+    // MARK: Add Lifecycle Handler
+    let handler = BarcodeDropLifecycleHandler()
+    app.lifecycle.use(handler)
+
+    app.changeStreamTask = nil
+
+    // MARK: Add Routes
     try await routes(app)
     
 }

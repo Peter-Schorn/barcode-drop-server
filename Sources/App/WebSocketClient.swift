@@ -14,5 +14,14 @@ class WebSocketClient: @unchecked Sendable {
         self.user = user
         self.socket = socket
     }
+
+    func sendJSON(
+        _ value: Encodable,
+        using encoder: JSONEncoder = .iso8601
+    ) async throws {
+
+        try await self.socket.sendJSON(value, using: encoder)
+        
+    }
     
 }

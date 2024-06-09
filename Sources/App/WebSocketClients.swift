@@ -30,15 +30,61 @@ class WebsocketClients: @unchecked Sendable {
 
         //  handle incoming messages
         client.socket.onText { [weak self] ws, text in
-            
-            self?.logger.info(#"received text: "\#(text)""#)
-            
-            // ws.send(#"echoing back: "\#(text)""#)
+
+            guard let self = self else { return }
+        
+            let loggingPrefix = """
+                [\(Date())] \(client.user) (client id: \(client.id))
+                """
+
+            self.logger.info(
+                """
+                \(loggingPrefix) received text: "\(text)"
+                """
+            )
+
+            // send high-level pong response
+            if text == "ping" {
+                self.logger.info(
+                    """
+                    \(loggingPrefix) received ping; sending pong
+                    """
+                )
+                ws.send("pong")
+            }
+    
         }
 
         // handle websocket disconnect
-        client.socket.onClose.whenComplete { [weak self] _ in
-            self?.logger.info("websocket disconnected")
+        client.socket.onClose.whenComplete { [weak self] result in
+            self?.logger.info(
+                """
+                websocket disconnected for user \(client.user) \
+                (client id: \(client.id)) result: \(result)
+                """
+            )
+        }
+
+        client.socket.pingInterval = .seconds(5)
+
+        client.socket.onPing { [weak self] ws, data in
+            self?.logger.trace(
+                """
+                \(client.user) received low-level PING for user '\(client.user)' \
+                (client id: \(client.id)): \
+                \(String(buffer: data))
+                """
+            )
+        }
+
+        client.socket.onPong { [weak self] ws, data in
+            self?.logger.trace(
+                """
+                \(client.user) received low-level PONG for user '\(client.user)' \
+                (client id: \(client.id)) \
+                \(String(buffer: data))
+                """
+            )
         }
 
     }
@@ -57,6 +103,13 @@ class WebsocketClients: @unchecked Sendable {
     }
 
     deinit {
+        let clients = self.storage.values
+        self.logger.notice(
+            """
+            WebSocketClients.deinit: deinitializing WebsocketClients: \
+            \(clients)
+            """
+        )
         let futures = self.storage.values.map { $0.socket.close() }
         try? self.eventLoop.flatten(futures).wait()
     }

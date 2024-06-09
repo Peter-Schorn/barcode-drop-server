@@ -1,40 +1,56 @@
 import Foundation
+import Logging
 import Vapor
 @preconcurrency import MongoKitten
 
+import AWSS3
+import ClientRuntime
+import AWSElasticBeanstalk
+
 func routes(_ app: Application) async throws {
 
-    // MARK: Initialize Database
+    // MARK: - Initialize AWS -
+    let ebConfig = try await ElasticBeanstalkClient.ElasticBeanstalkClientConfiguration()
+    let elasticBeanstalkClient = ElasticBeanstalkClient(config: ebConfig)
+    
+    guard let backendEnvironmentID = ProcessInfo.processInfo
+            .environment["BARCODE_DROP_BACKEND_ENVIRONMENT_ID"] else {
+        fatalError(
+            """
+            could not retrieve backend environment ID from \
+            BARCODE_DROP_BACKEND_ENVIRONMENT_ID environment variable
+            """
+        )
+    }
 
-
-    let barcodesCollection = app.mongo["barcodes"]
+    // MARK: - Protected Routes -
+    let protectedRoutes = ProtectedRoutes(
+        elasticBeanstalkClient: elasticBeanstalkClient,
+        backendEnvironmentID: backendEnvironmentID
+    )
+    try app.register(collection: protectedRoutes)
 
     // let scanStreamCollection = ScanStreamCollection(
-    //     collection: barcodesCollection
+    //     collection: app.barcodesCollection
     // )
     // try app.register(collection: scanStreamCollection)
 
-    let webSocketClients = WebsocketClients(eventLoop: app.eventLoopGroup.next())
-
     // MARK: - Change Streams -
-    // let changeStream = try await barcodesCollection.watch()
 
-    let changeStream: ChangeStream<ScannedBarcode>
+    func configureChangeStream() async {
+
+        app.logger.notice("listening to change stream")
+
+        app.changeStreamTask?.cancel()
+
+        let changeStream: ChangeStream<ScannedBarcode>
 
         do {
 
-            changeStream = try await barcodesCollection.buildChangeStream(
-                options: { () -> MongoKitten.ChangeStreamOptions in
-                    var options = ChangeStreamOptions()
-                    options.fullDocument = .required
-                    options.fullDocumentBeforeChange = .required
-                    return options
-                }(),
-                ofType: ScannedBarcode.self,
-                build: {
-                    // Match(where: "fullDocument.user" == user)
-                }
+            changeStream = try await makeAppChangeStream(
+                app.barcodesCollection
             )
+
             app.logger.info(
                 "created app-level change stream"
             )
@@ -48,9 +64,10 @@ func routes(_ app: Application) async throws {
             return
         }
 
-        // handle change stream notifications
-        Task.detached(operation: {
+        app.changeStreamTask = Task(operation: {
             do {
+                try Task.checkCancellation()
+                // handle change stream notifications
                 for try await notification in changeStream {
                     app.logger.info(
                         """
@@ -65,7 +82,7 @@ func routes(_ app: Application) async throws {
                         let user = document.user
                     {
                     // if let user = (notification.fullDocument ?? notification.fullDocumentBeforeChange)?.user {
-                        for client in webSocketClients.active {
+                        for client in app.webSocketClients.active {
                             if client.user == user {
 
                                 app.logger.info(
@@ -74,21 +91,22 @@ func routes(_ app: Application) async throws {
                                     (client.id: \(client.id)): \(notification)
                                     """
                                 )
+                                if [.insert, .replace, .update].contains(
+                                    notification.operationType
+                                ) {
 
-                                if notification.operationType == .insert {
-
-                                    let insertNewScan = InsertNewScan(
+                                    let insertNewScan = UpsertScan(
                                         document
                                     )
 
                                     app.logger.info(
                                         """
-                                        sending insertNewScan message to user \
+                                        sending upsertScan message to user \
                                         \(user) (client.id: \(client.id)): \(insertNewScan) 
                                         """
                                     )
 
-                                    try await client.socket.sendJSON(
+                                    try await client.sendJSON(
                                         insertNewScan
                                     )
 
@@ -107,7 +125,7 @@ func routes(_ app: Application) async throws {
                                         """
                                     )
 
-                                    try await client.socket.sendJSON(
+                                    try await client.sendJSON(
                                         deleteScan
                                     )
 
@@ -124,16 +142,35 @@ func routes(_ app: Application) async throws {
                             }
                         }
                     }
+                    try Task.checkCancellation()
                 }
             } catch {
+                if Task.isCancelled || error is CancellationError {
+                    app.logger.info(
+                        "change stream listener cancelled: \(error)"
+                    )
+                    return
+                }
                 app.logger.error(
                     """
                     error handling change stream notification: \(error)
                     """
                 )
+                app.logger.info(
+                    "re-creating change stream listener"
+                )
+                try await Task.sleep(for: .seconds(2))
+                try Task.checkCancellation()
+                // TODO: May have missed events during this period
+                // TODO: Must retrieve *ALL* scans and send to client
+                await configureChangeStream()
+
             }
         })
+    
+    }
 
+    await configureChangeStream()
         
     // MARK: - Routes -
 
@@ -143,7 +180,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.3.4)"
+        let message = "success (version 0.4.1)"
         req.logger.info("\(message)")
         return message
     }
@@ -218,7 +255,7 @@ func routes(_ app: Application) async throws {
             )
 
             // insert the scanned barcode into the database
-            try await barcodesCollection.insertEncoded(scannedBarcode)
+            try await app.barcodesCollection.insertEncoded(scannedBarcode)
 
             return "user '\(user ?? "nil")' scanned '\(scannedBarcode.barcode)'"
 
@@ -254,7 +291,7 @@ func routes(_ app: Application) async throws {
             "retrieving scanned barcodes with format: \(format)"
         )
 
-        let scans: [ScannedBarcode] = try await barcodesCollection
+        let scans: [ScannedBarcode] = try await app.barcodesCollection
             .find()  // find all documents in the collection
             .sort(["date": -1])  // sort by date in descending order
             .decode(ScannedBarcode.self)  // decode into model type
@@ -309,7 +346,7 @@ func routes(_ app: Application) async throws {
             """
         )
 
-        let scans: [ScannedBarcode] = try await barcodesCollection
+        let scans: [ScannedBarcode] = try await app.barcodesCollection
             .find("user" == user)  // find all documents for the user
             .sort(["date": -1])  // sort by date in descending order
             .decode(ScannedBarcode.self)  // decode into model type
@@ -379,7 +416,7 @@ func routes(_ app: Application) async throws {
             """
         )
 
-        let latestScan: ScannedBarcode? = try await barcodesCollection
+        let latestScan: ScannedBarcode? = try await app.barcodesCollection
             .find("user" == user)
             .sort(["date": -1])
             .limit(1)
@@ -430,7 +467,7 @@ func routes(_ app: Application) async throws {
 
         req.logger.info("retrieving users")
 
-        let users: [String] = try await barcodesCollection
+        let users: [String] = try await app.barcodesCollection
             .distinctValues(forKey: "user")
             .compactMap { $0 as? String }
         
@@ -447,7 +484,7 @@ func routes(_ app: Application) async throws {
 
         req.logger.info("====== deleting all barcodes ======")
 
-        let result = try await barcodesCollection.deleteAll(where: [:])
+        let result = try await app.barcodesCollection.deleteAll(where: [:])
 
         req.logger.info("delete result: \(result)")
 
@@ -465,7 +502,7 @@ func routes(_ app: Application) async throws {
             "deleting all barcodes except the last \(n) scans"
         )
 
-        let lastScans: [ScannedBarcode] = try await barcodesCollection
+        let lastScans: [ScannedBarcode] = try await app.barcodesCollection
             .find()
             .sort(["date": -1])
             .limit(n)
@@ -478,7 +515,7 @@ func routes(_ app: Application) async throws {
             "last \(n) scans: \(lastScans)"
         )
 
-        let result = try await barcodesCollection.deleteAll(
+        let result = try await app.barcodesCollection.deleteAll(
             where: "_id" != ["$in": lastScanIDs]
         )
 
@@ -488,7 +525,7 @@ func routes(_ app: Application) async throws {
 
         return "deleted all barcodes except the last \(n) scans"
 
-    }
+    }  // MARK: - BAD -
 
     // MARK: DELETE /scans/:user
     //
@@ -501,7 +538,7 @@ func routes(_ app: Application) async throws {
             "deleting all barcodes for user: \(user ?? "nil")"
         )
 
-        let result = try await barcodesCollection.deleteAll(
+        let result = try await app.barcodesCollection.deleteAll(
             where: "user" == user
         )
 
@@ -525,7 +562,7 @@ func routes(_ app: Application) async throws {
             "deleting all barcodes except the last \(n) scans for user: \(user ?? "nil")"
         )
 
-        let lastScans: [ScannedBarcode] = try await barcodesCollection
+        let lastScans: [ScannedBarcode] = try await app.barcodesCollection
             .find("user" == user)
             .sort(["date": -1])
             .limit(n)
@@ -538,7 +575,7 @@ func routes(_ app: Application) async throws {
             "last \(n) scans for user \(user ?? "nil"): \(lastScans)"
         )
 
-        let result = try await barcodesCollection.deleteAll(
+        let result = try await app.barcodesCollection.deleteAll(
             where: "user" == user && "_id" != ["$in": lastScanIDs]
         )
 
@@ -610,7 +647,7 @@ func routes(_ app: Application) async throws {
             ]
         ]
 
-        let result = try await barcodesCollection.deleteAll(
+        let result = try await app.barcodesCollection.deleteAll(
             where: doc
         )
 
@@ -618,7 +655,7 @@ func routes(_ app: Application) async throws {
             "delete result: \(result) (request: \(deleteScansRequest)"
         )
 
-        return "deleted barcodes:: \(deleteScansRequest)"
+        return "deleted barcodes: \(deleteScansRequest)"
 
         // fatalError("not implemented")
 
@@ -626,7 +663,7 @@ func routes(_ app: Application) async throws {
 
     // MARK: DELETE /all-scans/older?t=<seconds>
     // Deletes all scans for all users older than a specified number of seconds
-    // from the database. The default is 300 seconds (5 minutes).
+    // from the database. The default is 3,600 seconds (1 hour).
     app.delete("all-scans", "older") { req async throws -> String in
 
         req.logger.info(
@@ -643,7 +680,7 @@ func routes(_ app: Application) async throws {
                 throw Abort(.badRequest)
             }
             return int
-        } ?? 300  // DEFAULT: 300 seconds (5 minutes)
+        } ?? 3_600  // DEFAULT: 3,600 seconds (1 hour)
 
         req.logger.info(
             """
@@ -654,7 +691,7 @@ func routes(_ app: Application) async throws {
 
         let date = Date().addingTimeInterval(TimeInterval(-seconds))
 
-        let result = try await barcodesCollection.deleteAll(
+        let result = try await app.barcodesCollection.deleteAll(
             where: "date" < date
         )
 
@@ -673,11 +710,10 @@ func routes(_ app: Application) async throws {
 
     }
 
-
     // MARK: DELETE /scans/<user>/older?t=<seconds>
     //
     // Deletes scanned barcodes for a user older than a specified number of
-    // seconds (Int) from the database. The default is 300 seconds (5 minutes).
+    // seconds (Int) from the database. The default is 3,600 seconds (1 hour).
     app.delete("scans", ":user", "older") { req async throws -> String in
 
         req.logger.info(
@@ -702,7 +738,7 @@ func routes(_ app: Application) async throws {
                 throw Abort(.badRequest)
             }
             return int
-        } ?? 300  // DEFAULT: 300 seconds (5 minutes)
+        } ?? 3_600  // DEFAULT: 3,600 seconds (1 hour)
 
         req.logger.info(
             "deleting barcodes older than \(seconds) seconds for user: \(user)"
@@ -710,7 +746,7 @@ func routes(_ app: Application) async throws {
 
         let date = Date().addingTimeInterval(TimeInterval(-seconds))
 
-        let result = try await barcodesCollection.deleteAll(
+        let result = try await app.barcodesCollection.deleteAll(
             where: "user" == user && "date" < date
         )
 
@@ -735,36 +771,7 @@ func routes(_ app: Application) async throws {
 
     // MARK: - Web Sockets -
 
-    // MARK: WebSocket /ws-test
-    //
-    // A test websocket route that sends a message to the client when the
-    // connection is established.
-    // app.webSocket("ws-test") { req, ws in 
-            
-    //     req.logger.info("websocket connected")
-
-    //     webSocketClients.add(WebSocketClient(id: UUID(), user: "peter", socket: ws))
-
-    //     // do {
-    //     // // try await Task.sleep(for: .seconds(10))
-    //     //
-    //     // req.logger.info("sending message to websocket")
-    //     // try await ws.send("this is some text sent from the web socket")
-    //     // req.logger.info("sent message to websocket")
-    //     // 
-    //     // // req.logger.info("sending *ANOTHER* message to websocket")
-    //     // // try await ws.send("this is some text sent from the web socket")
-    //     // // req.logger.info("sent *ANOTHER* message to websocket")
-    //     // 
-    //     // } catch let wsError {
-    //     //     req.logger.error(
-    //     //         "web socket error: \(wsError)"
-    //     //     )
-    //     // }
-
-    // }
-
-    // WebSocket /watch/:user
+    // MARK: WebSocket /watch/:user
     //
     // 
     app.webSocket("watch", ":user") { req, ws in
@@ -793,7 +800,7 @@ func routes(_ app: Application) async throws {
             socket: ws
         )
 
-        webSocketClients.add(client)
+        app.webSocketClients.add(client)
 
         req.logger.info(
             """

@@ -17,6 +17,10 @@ let package = Package(
             // from: "7.2.0"
             url: "https://github.com/Peter-Schorn/MongoKitten.git",
             branch: "full-document-before-change"
+        ),
+        .package(
+            url: "https://github.com/awslabs/aws-sdk-swift",
+            from: "0.45.0"
         )
     ],
     targets: [
@@ -25,7 +29,10 @@ let package = Package(
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "MongoKitten", package: "MongoKitten"),
-                .product(name: "Meow", package: "MongoKitten")
+                .product(name: "Meow", package: "MongoKitten"),
+                .product(name: "AWSS3", package: "aws-sdk-swift"),
+                .product(name: "AWSClientRuntime", package: "aws-sdk-swift"),
+                .product(name: "AWSElasticBeanstalk", package: "aws-sdk-swift")
             ],
             swiftSettings: swiftSettings
         ),
