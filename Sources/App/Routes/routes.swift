@@ -13,15 +13,15 @@ func routes(_ app: Application) async throws {
     // let ebConfig = try await ElasticBeanstalkClient.ElasticBeanstalkClientConfiguration()
     // let elasticBeanstalkClient = ElasticBeanstalkClient(config: ebConfig)
     
-    guard let backendEnvironmentID = ProcessInfo.processInfo
-            .environment["BARCODE_DROP_BACKEND_ENVIRONMENT_ID"] else {
-        fatalError(
-            """
-            could not retrieve backend environment ID from \
-            BARCODE_DROP_BACKEND_ENVIRONMENT_ID environment variable
-            """
-        )
-    }
+    // guard let backendEnvironmentID = ProcessInfo.processInfo
+    //         .environment["BARCODE_DROP_BACKEND_ENVIRONMENT_ID"] else {
+    //     fatalError(
+    //         """
+    //         could not retrieve backend environment ID from \
+    //         BARCODE_DROP_BACKEND_ENVIRONMENT_ID environment variable
+    //         """
+    //     )
+    // }
 
     // MARK: - Protected Routes -
     // let protectedRoutes = ProtectedRoutes(
