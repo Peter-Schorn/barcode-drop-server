@@ -37,6 +37,7 @@ func routes(_ app: Application) async throws {
 
     // MARK: - Change Streams -
 
+    @Sendable /* but is it though? */ 
     func configureChangeStream() async {
 
         app.logger.notice("listening to change stream")
@@ -87,27 +88,28 @@ func routes(_ app: Application) async throws {
 
                                 app.logger.info(
                                     """
-                                    notification applies to user \(user) \
-                                    (client.id: \(client.id)): \(notification)
+                                    app-level change stream notification applies \
+                                    to user \(user) (client.id: \(client.id)): \
+                                    \(notification)
                                     """
                                 )
                                 if [.insert, .replace, .update].contains(
                                     notification.operationType
                                 ) {
 
-                                    let insertNewScan = UpsertScan(
+                                    let upsertScan = UpsertScan(
                                         document
                                     )
 
                                     app.logger.info(
                                         """
                                         sending upsertScan message to user \
-                                        \(user) (client.id: \(client.id)): \(insertNewScan) 
+                                        \(user) (client.id: \(client.id)): \(upsertScan) 
                                         """
                                     )
 
                                     try await client.sendJSON(
-                                        insertNewScan
+                                        upsertScan
                                     )
 
                                 }
@@ -147,31 +149,127 @@ func routes(_ app: Application) async throws {
             } catch {
                 if Task.isCancelled || error is CancellationError {
                     app.logger.info(
-                        "change stream listener cancelled: \(error)"
+                        """
+                        app-level change stream listener cancelled: \
+                        \(error)
+                        """
                     )
                     return
                 }
                 app.logger.error(
                     """
-                    error handling change stream notification: \(error)
+                    error handling app-level change stream notification: \
+                    \(error)
                     """
                 )
                 app.logger.info(
-                    "re-creating change stream listener"
+                    "re-creating app-level change stream listener"
                 )
                 try await Task.sleep(for: .seconds(2))
                 try Task.checkCancellation()
-                // TODO: May have missed events during this period
-                // TODO: Must retrieve *ALL* scans and send to client
                 await configureChangeStream()
-
+                await sendAllScansToAllClients()
             }
         })
     
     }
 
-    await configureChangeStream()
+    /// Retrieves all scanned barcodes for a user from the database.
+    /// - Parameter user: The user who scanned the barcodes. If `nil`, then all
+    /// scanned barcodes are retrieved.
+    @Sendable
+    func retrieveAllScansForUser(_ user: String?) async throws -> [ScannedBarcodeResponse] {
+        let scans: [ScannedBarcode] = try await app.barcodesCollection
+            .find("user" == user)  // find all documents for the user
+            .sort(["date": -1])  // sort by date in descending order
+            .decode(ScannedBarcode.self)  // decode into model type
+            .drain()  // load all documents into memory
+            
+        return ScannedBarcodeResponse.array(scans)
+    }
+
+    /// Sends all scanned barcodes for a user to the user's client(s).
+    /// - Parameter user: The user who scanned the barcodes. If `nil`, then all
+    /// scanned barcodes are sent to all clients.
+    @Sendable
+    func sendAllScansToUser(_ user: String?) async {
         
+        guard let user = user else {
+            return await sendAllScansToAllClients()
+        }
+        
+        do {
+            app.logger.info("sending all scans to user \(user)")
+
+            let scans = try await retrieveAllScansForUser(user)
+            let replaceAllScans = ReplaceAllScans(scans)
+            for client in app.webSocketClients.active {
+                if client.user == user {
+                    try await client.sendJSON(replaceAllScans)
+                }
+            }
+        } catch {
+            app.logger.error(
+                "could not send all scans to user \(user): \(error)"
+            )
+        }
+
+    }
+
+    @Sendable
+    func retrieveAllScansForAllUsers() async throws -> [ScannedBarcodeResponse] {
+        let scans: [ScannedBarcode] = try await app.barcodesCollection
+            .find()  // find all documents in the collection
+            .sort(["date": -1])  // sort by date in descending order
+            .decode(ScannedBarcode.self)  // decode into model type
+            .drain()  // load all documents into memory
+            
+        return ScannedBarcodeResponse.array(scans)
+    }
+
+    @Sendable
+    func sendAllScansToAllClients() async {
+
+        do {
+
+            app.logger.info("sending all scans to all clients")
+
+            let allScans = try await retrieveAllScansForAllUsers()
+
+            app.logger.info(
+                "retrieved all scans (\(allScans.count)): \(allScans)"
+            )
+
+            let userScans = Dictionary(grouping: allScans, by: { $0.user })
+
+            for (user, scans) in userScans where user != nil {
+                for client in app.webSocketClients.active {
+                    if client.user == user {
+                        let replaceAllScans = ReplaceAllScans(scans)
+                        app.logger.info(
+                            """
+                            sending replaceAllScans message to user \
+                            \(user ?? "nil") (client.id: \(client.id)): \
+                            (\(scans.count) scans) \(replaceAllScans)
+                            """
+                        )
+                        try await client.sendJSON(replaceAllScans)
+                    }
+                }
+            }
+
+            app.logger.info("sent all scans to all clients")
+
+        } catch {
+            app.logger.error(
+                "could not send all scans to all clients: \(error)"
+            )
+        }
+
+    }
+
+    await configureChangeStream()
+
     // MARK: - Routes -
 
     app.logger.info("setting up routes")
@@ -180,7 +278,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.4.2)"
+        let message = "success (version 0.4.3)"
         req.logger.info("\(message)")
         return message
     }
@@ -291,13 +389,8 @@ func routes(_ app: Application) async throws {
             "retrieving scanned barcodes with format: \(format)"
         )
 
-        let scans: [ScannedBarcode] = try await app.barcodesCollection
-            .find()  // find all documents in the collection
-            .sort(["date": -1])  // sort by date in descending order
-            .decode(ScannedBarcode.self)  // decode into model type
-            .drain()  // load all documents into memory
         
-        let scannedBarcodesResponse = ScannedBarcodeResponse.array(scans)
+        let scannedBarcodesResponse = try await retrieveAllScansForAllUsers()
         
         req.logger.info(
             """
@@ -346,13 +439,7 @@ func routes(_ app: Application) async throws {
             """
         )
 
-        let scans: [ScannedBarcode] = try await app.barcodesCollection
-            .find("user" == user)  // find all documents for the user
-            .sort(["date": -1])  // sort by date in descending order
-            .decode(ScannedBarcode.self)  // decode into model type
-            .drain()  // load all documents into memory
-        
-        let scannedBarcodesResponse = ScannedBarcodeResponse.array(scans)
+        let scannedBarcodesResponse = try await retrieveAllScansForUser(user)
         
         req.logger.info(
             """
@@ -525,7 +612,7 @@ func routes(_ app: Application) async throws {
 
         return "deleted all barcodes except the last \(n) scans"
 
-    }  // MARK: - BAD -
+    }
 
     // MARK: DELETE /scans/:user
     //
@@ -793,7 +880,6 @@ func routes(_ app: Application) async throws {
             return
         }
 
-
         let client = WebSocketClient(
             id: UUID(),
             user: user,
@@ -801,6 +887,11 @@ func routes(_ app: Application) async throws {
         )
 
         app.webSocketClients.add(client)
+
+        Task.detached {
+            try await Task.sleep(for: .seconds(2))
+            await sendAllScansToUser(user)
+        }
 
         req.logger.info(
             """

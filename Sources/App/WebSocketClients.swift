@@ -37,20 +37,21 @@ class WebsocketClients: @unchecked Sendable {
                 [\(Date())] \(client.user) (client id: \(client.id))
                 """
 
-            self.logger.info(
-                """
-                \(loggingPrefix) received text: "\(text)"
-                """
-            )
-
             // send high-level pong response
             if text == "ping" {
                 self.logger.info(
                     """
-                    \(loggingPrefix) received ping; sending pong
+                    \(loggingPrefix) received ping -> sending pong
                     """
                 )
                 ws.send("pong")
+            }
+            else {
+                self.logger.info(
+                    """
+                    \(loggingPrefix) received text: "\(text)"
+                    """
+                )
             }
     
         }
