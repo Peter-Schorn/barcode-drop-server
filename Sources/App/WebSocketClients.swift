@@ -23,7 +23,10 @@ class WebsocketClients: @unchecked Sendable {
     func add(_ client: WebSocketClient) {
         
         self.logger.info(
-            "WebsocketClients.add(_:) adding client with id: \(client.id)"
+            """
+            WebsocketClients.add(_:) adding client: \(client.user) \
+            (client id: \(client.id)
+            """
         )
 
         self.storage[client.id] = client
@@ -65,6 +68,7 @@ class WebsocketClients: @unchecked Sendable {
                 """
             )
         }
+
 
         client.socket.pingInterval = .seconds(5)
 
