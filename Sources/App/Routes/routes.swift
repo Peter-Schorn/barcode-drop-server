@@ -35,6 +35,25 @@ func routes(_ app: Application) async throws {
     // )
     // try app.register(collection: scanStreamCollection)
 
+    // MARK: - Send Scans to Users Task -
+
+    /// Configures a task that sends all scans to all clients every 5 minutes.
+    func configureSendScansToUserTask() {
+        app.logger.info("configuring sendScansToUserTask")
+        app.sendScansToUsersTask?.cancel()
+        app.sendScansToUsersTask = Task.init {
+            while true {
+                try await Task.sleep(for: .seconds(300))  // 5 minutes
+                app.logger.info(
+                    """
+                    calling sendAllScansToAllUsers from sendScansToUsersTask
+                    """
+                )
+                await sendAllScansToAllUsers()
+            }
+        }
+    }
+
     // MARK: - Change Streams -
 
     @Sendable /* but is it though? */ 
@@ -57,12 +76,25 @@ func routes(_ app: Application) async throws {
             )
 
         } catch {
-            app.logger.error(
+            app.logger.critical(
                 """
                 could not create app-level change stream: \(error)
                 """
             )
-            return
+
+            do {
+                try await Task.sleep(for: .seconds(2))
+                return await configureChangeStream()
+            } catch {
+                app.logger.error(
+                    """
+                    could not sleep before re-creating app-level change \
+                    stream: \(error)
+                    """
+                )
+                return
+            }
+
         }
 
         app.changeStreamTask = Task(operation: {
@@ -107,10 +139,19 @@ func routes(_ app: Application) async throws {
                                         \(user) (client.id: \(client.id)): \(upsertScan) 
                                         """
                                     )
+                                    do {
+                                        try await client.sendJSON(
+                                            upsertScan
+                                        )
 
-                                    try await client.sendJSON(
-                                        upsertScan
-                                    )
+                                    } catch {
+                                        app.logger.error(
+                                            """
+                                            could not send upsertScan message to user \
+                                            \(user) (client.id: \(client.id)): \(error)
+                                            """
+                                        )
+                                    }
 
                                 }
                                 else if notification.operationType == .delete {
@@ -126,10 +167,19 @@ func routes(_ app: Application) async throws {
                                         \(deleteScan)
                                         """
                                     )
-
-                                    try await client.sendJSON(
-                                        deleteScan
-                                    )
+                                    do {
+                                        try await client.sendJSON(
+                                            deleteScan
+                                        )
+    
+                                    } catch {
+                                        app.logger.error(
+                                            """
+                                            could not send deleteScan message to user \
+                                            \(user) (client.id: \(client.id)): \(error)
+                                            """
+                                        )
+                                    }
 
                                 }
                                 else {
@@ -166,9 +216,8 @@ func routes(_ app: Application) async throws {
                     "re-creating app-level change stream listener"
                 )
                 try await Task.sleep(for: .seconds(2))
-                try Task.checkCancellation()
                 await configureChangeStream()
-                await sendAllScansToAllClients()
+                await sendAllScansToAllUsers()
             }
         })
     
@@ -195,7 +244,7 @@ func routes(_ app: Application) async throws {
     func sendAllScansToUser(_ user: String?) async {
         
         guard let user = user else {
-            return await sendAllScansToAllClients()
+            return await sendAllScansToAllUsers()
         }
         
         do {
@@ -205,7 +254,25 @@ func routes(_ app: Application) async throws {
             let replaceAllScans = ReplaceAllScans(scans)
             for client in app.webSocketClients.active {
                 if client.user == user {
-                    try await client.sendJSON(replaceAllScans)
+                    app.logger.info(
+                        """
+                        sendAllScansToUser: sending replaceAllScans message to \
+                        user \(user) (client.id: \(client.id)) \
+                        (\(scans.count) scans): \(replaceAllScans)
+                        """
+                    )
+                    do {
+                        try await client.sendJSON(replaceAllScans)
+
+                    } catch {
+                        app.logger.error(
+                            """
+                            sendAllScansToUser: could not send replaceAllScans \
+                            message to user \(user) (client.id: \(client.id)): \
+                            \(error)
+                            """
+                        )
+                    }
                 }
             }
         } catch {
@@ -228,7 +295,7 @@ func routes(_ app: Application) async throws {
     }
 
     @Sendable
-    func sendAllScansToAllClients() async {
+    func sendAllScansToAllUsers() async {
 
         do {
 
@@ -243,18 +310,32 @@ func routes(_ app: Application) async throws {
             let userScans = Dictionary(grouping: allScans, by: { $0.user })
 
             for (user, scans) in userScans where user != nil {
-                for client in app.webSocketClients.active {
-                    if client.user == user {
-                        let replaceAllScans = ReplaceAllScans(scans)
-                        app.logger.info(
+                for client in app.webSocketClients.active where client.user == user {
+
+                    let replaceAllScans = ReplaceAllScans(scans)
+
+                    app.logger.info(
+                        """
+                        sendAllScansToAllUsers: sending replaceAllScans \
+                        message to user \(user ?? "nil") \
+                        (client.id: \(client.id)) (\(scans.count) scans): \
+                        \(replaceAllScans)
+                        """
+                    )
+                    
+                    do {
+                        try await client.sendJSON(replaceAllScans)
+
+                    } catch {
+                        app.logger.error(
                             """
-                            sending replaceAllScans message to user \
-                            \(user ?? "nil") (client.id: \(client.id)): \
-                            (\(scans.count) scans) \(replaceAllScans)
+                            sendAllScansToAllUsers: could not send \
+                            replaceAllScans message to user \(user ?? "nil") \
+                            (client.id: \(client.id)): \(error)
                             """
                         )
-                        try await client.sendJSON(replaceAllScans)
                     }
+
                 }
             }
 
@@ -268,6 +349,7 @@ func routes(_ app: Application) async throws {
 
     }
 
+    configureSendScansToUserTask()
     await configureChangeStream()
 
     // MARK: - Routes -
@@ -624,6 +706,9 @@ func routes(_ app: Application) async throws {
         req.logger.info(
             "deleting all barcodes for user: \(user ?? "nil")"
         )
+
+        // let transaction = try await app.mongo.startTransaction(autoCommitChanges: false)
+        // let barcodesCollection = transaction["barcodes"]
 
         let result = try await app.barcodesCollection.deleteAll(
             where: "user" == user

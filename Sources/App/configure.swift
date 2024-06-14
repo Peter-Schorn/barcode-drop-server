@@ -63,8 +63,6 @@ public func configure(_ app: Application) async throws {
     let handler = BarcodeDropLifecycleHandler()
     app.lifecycle.use(handler)
 
-    app.changeStreamTask = nil
-
     // MARK: Add Routes
     try await routes(app)
     
