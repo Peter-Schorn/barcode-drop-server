@@ -386,7 +386,7 @@ func routes(_ app: Application) async throws {
     app.post("scan", ":user") { req async throws -> String in
         do {
 
-            // the date the barcode was received by the server
+            /// the date the barcode was received by the server
             let date = Date()
 
             let user = req.parameters.get("user")
@@ -437,13 +437,17 @@ func routes(_ app: Application) async throws {
             // insert the scanned barcode into the database
             try await app.barcodesCollection.insertEncoded(scannedBarcode)
 
-            return "user '\(user ?? "nil")' scanned '\(scannedBarcode.barcode)'"
+            return """
+                user '\(user ?? "nil")' scanned '\(scannedBarcode.barcode)' \
+                (id: \(scannedBarcode._id.hexString))
+                """
 
         } catch let postBarcodeError {
 
             req.logger.warning(
                 """
                 error in POST /scan/<user>: \(postBarcodeError)
+                    user: \(req.parameters.get("user") ?? "nil")
                     URL: \(req.url)
                     Headers: \(req.headers)
                     Body:
