@@ -17,7 +17,7 @@ struct DeleteScan: Sendable, Content {
 
     static let type = "deleteScan"
 
-    static let defaultContentType: HTTPMediaType = .json
+    static let defaultContentType = HTTPMediaType.json
 
     let id: String
 

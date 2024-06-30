@@ -22,7 +22,7 @@ struct UpsertScan: Sendable, Content {
 
     static let type = "upsertScan"
 
-    static let defaultContentType: HTTPMediaType = .json
+    static let defaultContentType = HTTPMediaType.json
 
     let newScan: ScannedBarcodeResponse
 

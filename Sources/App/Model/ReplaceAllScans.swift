@@ -30,7 +30,7 @@ struct ReplaceAllScans: Sendable, Content {
 
     static let type = "replaceAllScans"
 
-    static let defaultContentType: HTTPMediaType = .json
+    static let defaultContentType = HTTPMediaType.json
 
     let scans: [ScannedBarcodeResponse]
 

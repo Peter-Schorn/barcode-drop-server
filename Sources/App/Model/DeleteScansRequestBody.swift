@@ -3,6 +3,8 @@ import Foundation
 
 struct DeleteScansRequestBody: Content {
     
+    static let defaultContentType = HTTPMediaType.json
+
     let ids: [String]
     let users: [String]
 

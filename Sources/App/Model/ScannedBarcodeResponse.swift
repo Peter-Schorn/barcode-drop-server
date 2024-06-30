@@ -5,7 +5,7 @@ import MongoKitten
 /// Represents a scanned barcode. Used in the response to GET /scans.
 struct ScannedBarcodeResponse: Sendable, Content {
 
-    static let defaultContentType: HTTPMediaType = .json
+    static let defaultContentType = HTTPMediaType.json
 
     let barcode: String
     let user: String?
