@@ -20,6 +20,10 @@ let package = Package(
             branch: "full-document-before-change"
 
             // path: "/Users/pschorn/Code/Swift/Libraries/MongoKitten"
+        ),
+        .package(
+            url: "https://github.com/fitomad/Checkpoint.git",
+            from: "0.1.0"
         )
         // .package(
         //     url: "https://github.com/awslabs/aws-sdk-swift",
@@ -32,7 +36,9 @@ let package = Package(
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "MongoKitten", package: "MongoKitten"),
-                .product(name: "Meow", package: "MongoKitten")
+                .product(name: "Meow", package: "MongoKitten"),
+                .product(name: "Checkpoint", package: "Checkpoint")
+
                 // .product(name: "AWSS3", package: "aws-sdk-swift"),
                 // .product(name: "AWSClientRuntime", package: "aws-sdk-swift"),
                 // .product(name: "AWSElasticBeanstalk", package: "aws-sdk-swift")

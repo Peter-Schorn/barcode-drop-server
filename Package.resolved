@@ -1,5 +1,5 @@
 {
-  "originHash" : "b7c06879be5b9c91cff83adea50efd1434016ccf5892db22c4ec050611fbea61",
+  "originHash" : "3c861277cf75ad3dff2b2f15721a58537ff69b73cb1cb24cc67cd0ce392228f6",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "ab23e8ebc00d5134126d336ac13981ff40c08a58",
         "version" : "8.1.1"
+      }
+    },
+    {
+      "identity" : "checkpoint",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/fitomad/Checkpoint.git",
+      "state" : {
+        "revision" : "36040772f132ab1e4cd5ce4c3c4ba9cbc3a16749",
+        "version" : "0.1.0"
       }
     },
     {
@@ -62,6 +71,24 @@
       "state" : {
         "revision" : "a31236f24bfd2ea2f520a74575881f6731d7ae68",
         "version" : "4.7.0"
+      }
+    },
+    {
+      "identity" : "redis",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/vapor/redis.git",
+      "state" : {
+        "revision" : "383ed57e5b5acd4dd447c2967aa665dc3bbe5be9",
+        "version" : "4.11.0"
+      }
+    },
+    {
+      "identity" : "redistack",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swift-server/RediStack.git",
+      "state" : {
+        "revision" : "622ce440f90d79b58e45f3a3efdd64c51d1dfd17",
+        "version" : "1.6.2"
       }
     },
     {

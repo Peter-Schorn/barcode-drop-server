@@ -1,5 +1,6 @@
 import Foundation
 import Vapor
+import Checkpoint
 @preconcurrency import MongoKitten
 // @preconcurrency import Meow
 
@@ -36,6 +37,18 @@ public func configure(_ app: Application) async throws {
     // cors middleware should come before default error middleware 
     // using `at: .beginning`
     app.middleware.use(corsMiddleware, at: .beginning)
+
+    // MARK: Rate Limiting Middleware
+
+    // let tokenBucket = SlidingWindowLog {
+    //     SlidingWindowLogConfiguration(
+    //         requestPerWindow: 5, 
+    //         windowDuration: .seconds(count: 5),
+    //         appliedTo: .header(key: "X-Rate-Limit")
+    //     )
+    // } storage: {
+        
+    // }
 
     // ---
 
