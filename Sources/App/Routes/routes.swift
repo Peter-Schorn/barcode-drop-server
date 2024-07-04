@@ -383,7 +383,7 @@ func routes(_ app: Application) async throws {
     // Query String: ?barcode=abc123
     // 
     // Response: "user 'peter' scanned 'abc123'"
-    app.post("scan", ":user") { req async throws -> String in
+    app.post("scan", ":user") { req async throws -> Response in
         do {
 
             /// the date the barcode was received by the server
@@ -437,10 +437,18 @@ func routes(_ app: Application) async throws {
             // insert the scanned barcode into the database
             try await app.barcodesCollection.insertEncoded(scannedBarcode)
 
-            return """
+            let responseText = """
                 user '\(user ?? "nil")' scanned '\(scannedBarcode.barcode)' \
                 (id: \(scannedBarcode._id.hexString))
                 """
+            
+            let response = Response()
+            response.headers.add(
+                name: "barcode-id", 
+                value: scannedBarcode._id.hexString
+            )
+            try response.content.encode(responseText)
+            return response
 
         } catch let postBarcodeError {
 
@@ -466,13 +474,12 @@ func routes(_ app: Application) async throws {
     // Retrieves all scanned barcodes from the database.
     app.get("scans") { req async throws -> Response in
 
-        let format = try req.query.get(
-            ScansOption.self,
-            at: "format"
+        let queryOptions = try req.query.decode(
+            GetScansQuery.self
         )
 
         req.logger.info(
-            "retrieving scanned barcodes with format: \(format)"
+            "retrieving scanned barcodes with queryOptions: \(queryOptions)"
         )
 
         
@@ -486,7 +493,7 @@ func routes(_ app: Application) async throws {
         )
 
         let response = Response()
-        switch format {
+        switch queryOptions.format {
             case .barcodesOnly:
                 let responseString = scannedBarcodesResponse
                     .map { $0.barcode }
@@ -495,7 +502,7 @@ func routes(_ app: Application) async throws {
             case .json:
                 try response.content.encode(
                     scannedBarcodesResponse,
-                    using: JSONEncoder.sortedKeysPrettyPrinted
+                    using: queryOptions.encoder
                 )
         }
 
@@ -511,17 +518,16 @@ func routes(_ app: Application) async throws {
 
         let user = req.parameters.get("user")
 
-        let format = try req.query.get(
-            ScansOption.self,
-            at: "format"
+        let queryOptions = try req.query.decode(
+            GetScansQuery.self
         )
 
         // let format = ScansOption.json
 
         req.logger.info(
             """
-            retrieving scanned barcodes for user \(user ?? "nil") with format: \
-            \(format)
+            retrieving scanned barcodes for user \(user ?? "nil") \
+            with queryOptions: \(queryOptions)
             """
         )
 
@@ -538,7 +544,7 @@ func routes(_ app: Application) async throws {
         // return scannedBarcodesResponse
         
         let response = Response()
-        switch format {
+        switch queryOptions.format {
             case .barcodesOnly:
                 let responseString = scannedBarcodesResponse
                     .map { $0.barcode }
@@ -547,7 +553,7 @@ func routes(_ app: Application) async throws {
             case .json:
                 try response.content.encode(
                     scannedBarcodesResponse,
-                    using: JSONEncoder.sortedKeysPrettyPrinted
+                    using: queryOptions.encoder
                 )
         }
 
@@ -628,6 +634,11 @@ func routes(_ app: Application) async throws {
                     using: JSONEncoder.sortedKeysPrettyPrinted
                 )
         }
+
+        response.headers.add(
+            name: "barcode-id", 
+            value: "\(scannedBarcodeResponse.id)"
+        )
 
         return response
 

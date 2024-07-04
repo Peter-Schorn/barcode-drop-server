@@ -12,6 +12,8 @@ db.sqlite
 .vscode
 config
 
+Package.resolved
+
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
