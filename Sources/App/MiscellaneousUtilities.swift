@@ -1,3 +1,7 @@
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 import Foundation
 import WebSocketKit
 import Foundation
@@ -132,6 +136,26 @@ extension ChangeStreamNotification {
 
         return hasher.finalize()
 
+    }
+
+}
+
+extension ISO8601DateFormatter {
+
+    static let defaultFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [
+            .withInternetDateTime, 
+        ]
+        return formatter
+    }()
+
+}
+
+extension Date {
+
+    var iso8601String: String {
+        return ISO8601DateFormatter.defaultFormatter.string(from: self)
     }
 
 }

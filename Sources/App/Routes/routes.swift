@@ -44,11 +44,12 @@ func routes(_ app: Application) async throws {
         app.sendScansToUsersTask = Task.init {
             while true {
                 try await Task.sleep(for: .seconds(300))  // 5 minutes
-                let dateString = Date().formatted(.iso8601)
+                
+                let date = Date()
                 app.logger.info(
                     """
-                    [\(dateString)] calling sendAllScansToAllUsers from \
-                    sendScansToUsersTask
+                    [\(date.iso8601String)] calling sendAllScansToAllUsers \
+                    from sendScansToUsersTask
                     """
                 )
                 await sendAllScansToAllUsers()
