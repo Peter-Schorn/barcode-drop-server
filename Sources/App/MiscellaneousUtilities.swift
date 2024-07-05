@@ -2,6 +2,7 @@ import Foundation
 import WebSocketKit
 import Foundation
 import Vapor
+import MongoCore
 @preconcurrency import MongoKitten
 
 extension Result {
@@ -77,5 +78,60 @@ func makeAppChangeStream(
             // Match(where: "fullDocument.user" == user)
         }
     )
+
+}
+
+extension MongoDatabase {
+
+    func withTransaction<T>(
+        autoCommitChanges autoCommit: Bool,
+        with options: MongoSessionOptions = .init(),
+        transactionOptions: MongoTransactionOptions? = nil,
+        _ body: @escaping (MongoTransactionDatabase) async throws -> T
+    ) async throws -> T {
+
+        let transaction = try await self.startTransaction(
+            autoCommitChanges: autoCommit,
+            with: options,
+            transactionOptions: transactionOptions
+        )
+
+        let result = try await body(transaction)
+
+        try await transaction.commit()
+
+        return result
+        
+    }
+
+}
+
+extension ChangeStreamNotification {
+
+    var lsidBinary: Binary? {
+        guard let lsid = self.lsid else {
+            return nil
+        }
+        return (lsid["id"] as? Binary)
+    }
+
+    // identify notifications from the same transaction
+    var lsidTxtHash: Int? {
+        
+        guard let lsidData = self.lsidBinary?.data else {
+            return nil
+        }
+
+        guard let txtNumber = self.txnNumber else {
+            return nil
+        }
+
+        var hasher = Hasher()
+        hasher.combine(lsidData)
+        hasher.combine(txtNumber)
+
+        return hasher.finalize()
+
+    }
 
 }

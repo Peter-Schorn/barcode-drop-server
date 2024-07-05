@@ -1,5 +1,5 @@
-import Vapor
 import Foundation
+import Vapor
 
 enum LatestScanOption: String, Sendable, Codable {
 

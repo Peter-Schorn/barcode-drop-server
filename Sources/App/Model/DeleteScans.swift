@@ -4,34 +4,32 @@ import MongoKitten
 
 /**
  Represents the message sent from the server to the client via a WebSocket
- connection to insert a new scan/update an existing scan.
+ connection to delete scans from the database.
 
  Example JSON:
 
  {    
-     type: "upsertScan",
-     newScan: {
-         barcode: "1234567890",
-         user: "schornpe",
-         id: "123e4567-e89b-12d3-a456-426614174000",
-         date: "2021-08-01T12:00:00Z"
-     }   
+     type: "deleteScans",
+     id: "123e4567-e89b-12d3-a456-426614174000"
  }      
  */
-struct UpsertScan: Sendable, Content {
+struct DeleteScans: Sendable, Content {
 
-    static let type = "upsertScan"
+    static let type = "deleteScans"
 
     static let defaultContentType = HTTPMediaType.json
 
-    let newScan: ScannedBarcodeResponse
+    let ids: [String]
 
-    init(_ newScan: ScannedBarcodeResponse) {
-        self.newScan = newScan
+    let transactionHash: Int?
+
+    init(_ ids: [String], transactionHash: Int? = nil) {
+        self.ids = ids
+        self.transactionHash = transactionHash
     }
 
-    init(_ newScan: ScannedBarcode) {
-        self.init(ScannedBarcodeResponse(newScan))
+    init(_ id: String, transactionHash: Int? = nil) {
+        self.init([id], transactionHash: transactionHash)
     }
 
     init(from decoder: Decoder) throws {
@@ -54,9 +52,14 @@ struct UpsertScan: Sendable, Content {
 
         }
 
-        self.newScan = try container.decode(
-            ScannedBarcodeResponse.self, 
-            forKey: .newScan
+        self.ids = try container.decode(
+            [String].self, 
+            forKey: .ids
+        )
+
+        self.transactionHash = try container.decodeIfPresent(
+            Int.self, 
+            forKey: .transactionHash
         )
 
     }
@@ -64,12 +67,16 @@ struct UpsertScan: Sendable, Content {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(Self.type, forKey: .type)
-        try container.encode(self.newScan, forKey: .newScan)
+        try container.encode(self.ids, forKey: .ids)
+        try container.encodeIfPresent(
+            self.transactionHash, forKey: .transactionHash
+        )
     }
 
     enum CodingKeys: String, CodingKey {
         case type
-        case newScan
+        case ids
+        case transactionHash
     }
 
 }

@@ -44,9 +44,11 @@ func routes(_ app: Application) async throws {
         app.sendScansToUsersTask = Task.init {
             while true {
                 try await Task.sleep(for: .seconds(300))  // 5 minutes
+                let dateString = Date().formatted(.iso8601)
                 app.logger.info(
                     """
-                    calling sendAllScansToAllUsers from sendScansToUsersTask
+                    [\(dateString)] calling sendAllScansToAllUsers from \
+                    sendScansToUsersTask
                     """
                 )
                 await sendAllScansToAllUsers()
@@ -129,25 +131,25 @@ func routes(_ app: Application) async throws {
                                     notification.operationType
                                 ) {
 
-                                    let upsertScan = UpsertScan(
+                                    let upsertScans = UpsertScans(
                                         document
                                     )
 
                                     app.logger.info(
                                         """
-                                        sending upsertScan message to user \
-                                        \(user) (client.id: \(client.id)): \(upsertScan) 
+                                        sending upsertScans message to user \
+                                        \(user) (client.id: \(client.id)): \(upsertScans) 
                                         """
                                     )
                                     do {
                                         try await client.sendJSON(
-                                            upsertScan
+                                            upsertScans
                                         )
 
                                     } catch {
                                         app.logger.error(
                                             """
-                                            could not send upsertScan message to user \
+                                            could not send upsertScans message to user \
                                             \(user) (client.id: \(client.id)): \(error)
                                             """
                                         )
@@ -156,26 +158,35 @@ func routes(_ app: Application) async throws {
                                 }
                                 else if notification.operationType == .delete {
 
-                                    let deleteScan = DeleteScan(
-                                        document._id.hexString
+                                    let deleteScans = DeleteScans(
+                                        document._id.hexString,
+                                        transactionHash: notification.lsidTxtHash
                                     )
+
+                                    // MARK: Group together delete notifications
+                                    // MARK: at this point
+
+                                    // let lsid: [UInt8] = notification.lsidBinary?.data.map({ $0 }) ?? []
+
+                                    let hash = notification.lsidTxtHash
+                                        .map(\.description) ?? "nil"
 
                                     app.logger.info(
                                         """
-                                        sending deleteScan message to user \
-                                        \(user) (client.id: \(client.id)): \
-                                        \(deleteScan)
+                                        sending deleteScans message to user \
+                                        \(user) (client.id: \(client.id); hash: \(hash)): \
+                                        \(deleteScans)
                                         """
                                     )
                                     do {
                                         try await client.sendJSON(
-                                            deleteScan
+                                            deleteScans
                                         )
     
                                     } catch {
                                         app.logger.error(
                                             """
-                                            could not send deleteScan message to user \
+                                            could not send deleteScans message to user \
                                             \(user) (client.id: \(client.id)): \(error)
                                             """
                                         )
@@ -348,6 +359,45 @@ func routes(_ app: Application) async throws {
         }
 
     }
+
+    @Sendable
+    func deleteWithTransaction(
+        _ filterDoc: Document
+    ) async throws -> DeleteReply {
+
+        app.logger.info(
+            """
+            deleteWithTransaction: deleting with transaction: \
+            filterDoc: \(filterDoc)
+            """
+        )
+
+        return try await app.mongo.withTransaction(
+            autoCommitChanges: false,
+            { db in
+                let barcodesCollection = db["barcodes"]
+                let result = try await barcodesCollection.deleteAll(
+                    where: filterDoc
+                )
+                app.logger.info(
+                    """
+                    deleteWithTransaction: delete result: \(result)
+                    """
+                )
+                return result
+            }
+        )
+
+    }
+
+    @Sendable
+    func deleteWithTransaction<Q: MongoKittenQuery & Sendable>(
+        _ filterDoc: Q
+    ) async throws -> DeleteReply {
+        return try await deleteWithTransaction(filterDoc.makeDocument())
+    }
+
+    // MARK: - Configure Tasks -
 
     configureSendScansToUserTask()
     await configureChangeStream()
@@ -668,7 +718,8 @@ func routes(_ app: Application) async throws {
 
         req.logger.info("====== deleting all barcodes ======")
 
-        let result = try await app.barcodesCollection.deleteAll(where: [:])
+        // let result = try await app.barcodesCollection.deleteAll(where: [:])
+        let result = try await deleteWithTransaction([:])
 
         req.logger.info("delete result: \(result)")
 
@@ -699,8 +750,11 @@ func routes(_ app: Application) async throws {
             "last \(n) scans: \(lastScans)"
         )
 
-        let result = try await app.barcodesCollection.deleteAll(
-            where: "_id" != ["$in": lastScanIDs]
+        // let result = try await app.barcodesCollection.deleteAll(
+        //     where: "_id" != ["$in": lastScanIDs]
+        // )
+        let result = try await deleteWithTransaction(
+            "_id" != ["$in": lastScanIDs]
         )
 
         req.logger.info(
@@ -725,9 +779,10 @@ func routes(_ app: Application) async throws {
         // let transaction = try await app.mongo.startTransaction(autoCommitChanges: false)
         // let barcodesCollection = transaction["barcodes"]
 
-        let result = try await app.barcodesCollection.deleteAll(
-            where: "user" == user
-        )
+        // let result = try await app.barcodesCollection.deleteAll(
+        //     where: "user" == user
+        // )
+        let result = try await deleteWithTransaction("user" == user)
 
         req.logger.info(
             "delete result for user \(user ?? "nil"): \(result)"
@@ -762,8 +817,8 @@ func routes(_ app: Application) async throws {
             "last \(n) scans for user \(user ?? "nil"): \(lastScans)"
         )
 
-        let result = try await app.barcodesCollection.deleteAll(
-            where: "user" == user && "_id" != ["$in": lastScanIDs]
+        let result = try await deleteWithTransaction(
+            "user" == user && "_id" != ["$in": lastScanIDs]
         )
 
         req.logger.info(
@@ -834,9 +889,10 @@ func routes(_ app: Application) async throws {
             ]
         ]
 
-        let result = try await app.barcodesCollection.deleteAll(
-            where: doc
-        )
+        // let result = try await app.barcodesCollection.deleteAll(
+        //     where: doc
+        // )
+        let result = try await deleteWithTransaction(doc)
 
         req.logger.info(
             "delete result: \(result) (request: \(deleteScansRequest)"
@@ -878,9 +934,10 @@ func routes(_ app: Application) async throws {
 
         let date = Date().addingTimeInterval(TimeInterval(-seconds))
 
-        let result = try await app.barcodesCollection.deleteAll(
-            where: "date" < date
-        )
+        // let result = try await app.barcodesCollection.deleteAll(
+        //     where: "date" < date
+        // )
+        let result = try await deleteWithTransaction("date" < date)
 
         req.logger.info(
             """
@@ -914,18 +971,19 @@ func routes(_ app: Application) async throws {
             throw Abort(.badRequest)
         }
 
-        let seconds = try req.query["t"].flatMap { secondsString throws -> Int in
-            guard let int = Int(secondsString) else {
-                req.logger.error(
-                    """
-                    could not convert secondsString '\(secondsString)' to Int \
-                    for user: \(user)
-                    """
-                )
-                throw Abort(.badRequest)
-            }
-            return int
-        } ?? 3_600  // DEFAULT: 3,600 seconds (1 hour)
+        let seconds = try req.query["t"]
+            .flatMap { (secondsString: String) throws -> Int in
+                guard let int = Int(secondsString) else {
+                    req.logger.error(
+                        """
+                        could not convert secondsString \
+                        '\(secondsString)' to Int for user: \(user)
+                        """
+                    )
+                    throw Abort(.badRequest)
+                }
+                return int
+            } ?? 3_600  // DEFAULT: 3,600 seconds (1 hour)
 
         req.logger.info(
             "deleting barcodes older than \(seconds) seconds for user: \(user)"
@@ -933,8 +991,11 @@ func routes(_ app: Application) async throws {
 
         let date = Date().addingTimeInterval(TimeInterval(-seconds))
 
-        let result = try await app.barcodesCollection.deleteAll(
-            where: "user" == user && "date" < date
+        // let result = try await app.barcodesCollection.deleteAll(
+        //     where: "user" == user && "date" < date
+        // )
+        let result = try await deleteWithTransaction(
+            "user" == user && "date" < date
         )
 
         req.logger.info(
