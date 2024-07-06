@@ -398,6 +398,16 @@ func routes(_ app: Application) async throws {
         return try await deleteWithTransaction(filterDoc.makeDocument())
     }
 
+    @Sendable
+    func getAllSplashText() async throws -> [String] {
+        let splashTexts: [String] = try await app.splashTextCollection
+            .find()
+            .decode(SplashText.self)
+            .drain()
+            .map { $0.message }
+        return splashTexts
+    }
+
     // MARK: - Configure Tasks -
 
     configureSendScansToUserTask()
@@ -411,7 +421,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.4.3)"
+        let message = "success (version 0.5.0)"
         req.logger.info("\(message)")
         return message
     }
@@ -712,7 +722,86 @@ func routes(_ app: Application) async throws {
 
     }
 
+    // MARK: Splash Text
+
+    // MARK: GET /splash-text
+    //
+    // Retrieves all splash text from the database.
+    app.get("splash-text") { req async throws -> [String] in
+
+        req.logger.info("retrieving splash text")
+
+        let splashTexts = try await getAllSplashText()
+
+        req.logger.info("retrieved splash text: \(splashTexts)")
+
+        return splashTexts
+
+    }
+
+    // MARK: GET /splash-text/random
+    //
+    // Retrieves a random splash text from the database.
+    app.get("splash-text", "random") { req async throws -> String in
+
+        req.logger.info("retrieving random splash text")
+
+        let splashTexts = try await getAllSplashText()
+
+        guard let randomSplashText = splashTexts.randomElement() else {
+            req.logger.error("could not get random splash text")
+            throw Abort(.internalServerError)
+        }
+
+        req.logger.info("retrieved random splash text: \(randomSplashText)")
+
+        return randomSplashText
+
+    }
+
+    // MARK: - POST -
+
+    // MARK: POST /splash-text
+    //
+    // Adds a splash text to the database.
+    //
+    // Request body: { "message": "Hello, World!" }
+    app.post("splash-text") { req async throws -> String in
+
+        let splashText: SplashText = try req.content.decode(SplashText.self)
+
+        req.logger.info("adding splash text: \(splashText)")
+
+        try await app.splashTextCollection.insertEncoded(splashText)
+
+        req.logger.info("added splash text: \(splashText)")
+
+        return "added splash text: \(splashText)"
+
+    }
+
+
     // MARK: - DELETE -
+
+    // MARK: Delete /splash-text
+    //
+    // deletes a splash text by IDs from the database
+    app.delete("splash-text") { req async throws -> String in
+
+        let ids: [String] = try req.content.decode([String].self)
+
+        req.logger.info("deleting splash text with ids: \(ids)")
+
+        let result = try await app.splashTextCollection.deleteAll(
+            where: "_id" == ["$in": ids.compactMap { ObjectId($0) }]
+        )
+
+        req.logger.info("delete result: \(result)")
+
+        return "deleted splash text with ids: \(ids)"
+
+    }
+
 
     // MARK: Delete /all-scans
     app.delete("all-scans") { req async throws -> String in

@@ -64,6 +64,12 @@ extension Application {
         }
     }
     
+    var splashTextCollection: MongoCollection {
+        get {
+            return self.mongo["splash_text"]
+        }
+    }
+
     func initializeMongoDB(connectionString: String) throws {
         self.mongo = try MongoDatabase.lazyConnect(to: connectionString)
     }
