@@ -9,7 +9,7 @@ struct GetScansQuery: Content {
     var encoder: JSONEncoder {
         return self.prettyPrinted ? 
             .sortedKeysPrettyPrinted :
-            .sortedKeys
+            .iso8601
             
     }
 

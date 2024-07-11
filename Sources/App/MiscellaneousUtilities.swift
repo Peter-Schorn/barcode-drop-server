@@ -27,6 +27,12 @@ extension Result {
 
 extension JSONEncoder {
 
+    static let iso8601: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+    
     static let sortedKeys: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -37,12 +43,6 @@ extension JSONEncoder {
     static let sortedKeysPrettyPrinted: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }()
-
-    static let iso8601: JSONEncoder = {
-        let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }()

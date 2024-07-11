@@ -167,6 +167,9 @@ func routes(_ app: Application) async throws {
                                     // MARK: Group together delete notifications
                                     // MARK: at this point
 
+                                    // MARK: Extract to separate function in
+                                    // MARK: separate file
+
                                     // let lsid: [UInt8] = notification.lsidBinary?.data.map({ $0 }) ?? []
 
                                     let hash = notification.lsidTxtHash
