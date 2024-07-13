@@ -41,7 +41,7 @@ func routes(_ app: Application) async throws {
     func configureSendScansToUserTask() {
         app.logger.info("configuring sendScansToUserTask")
         app.sendScansToUsersTask?.cancel()
-        app.sendScansToUsersTask = Task.init {
+        app.sendScansToUsersTask = Task.detached {
             while true {
                 try await Task.sleep(for: .seconds(300))  // 5 minutes
                 
@@ -62,7 +62,7 @@ func routes(_ app: Application) async throws {
     @Sendable /* but is it though? */ 
     func configureChangeStream() async {
 
-        app.logger.notice("listening to change stream")
+        app.logger.notice("configuring change stream")
 
         app.changeStreamTask?.cancel()
 
@@ -100,10 +100,14 @@ func routes(_ app: Application) async throws {
 
         }
 
-        app.changeStreamTask = Task(operation: {
+        app.changeStreamTask = Task.detached(operation: {
             do {
                 try Task.checkCancellation()
-                // handle change stream notifications
+
+                app.logger.notice("--- listening to change stream ---")
+                
+                
+                // MARK: Handle Change Stream Notifications
                 for try await notification in changeStream {
                     app.logger.info(
                         """
@@ -117,98 +121,44 @@ func routes(_ app: Application) async throws {
                                 ?? notification.fullDocumentBeforeChange,
                         let user = document.user
                     {
-                    // if let user = (notification.fullDocument ?? notification.fullDocumentBeforeChange)?.user {
-                        for client in app.webSocketClients.active {
-                            if client.user == user {
+                        
+                        let userClients = app.webSocketClients.active
+                            .filter { $0.user == user }
 
-                                app.logger.info(
+
+                        // group.addTask {
+                        let sendNotificationToUserTask = Task.detached(operation: {
+                            do {
+                                try await sendNotificationToUser(
+                                    notification: notification,
+                                    clients: userClients,
+                                    document: document,
+                                    user: user
+                                )
+
+                            } catch {
+                                app.logger.error(
                                     """
-                                    app-level change stream notification applies \
-                                    to user \(user) (client.id: \(client.id)): \
-                                    \(notification)
+                                    error sending notification to user \(user): \
+                                    clients: \(userClients):
+                                    \(error)
                                     """
                                 )
-                                if [.insert, .replace, .update].contains(
-                                    notification.operationType
-                                ) {
-
-                                    let upsertScans = UpsertScans(
-                                        document
-                                    )
-
-                                    app.logger.info(
-                                        """
-                                        sending upsertScans message to user \
-                                        \(user) (client.id: \(client.id)): \(upsertScans) 
-                                        """
-                                    )
-                                    do {
-                                        try await client.sendJSON(
-                                            upsertScans
-                                        )
-
-                                    } catch {
-                                        app.logger.error(
-                                            """
-                                            could not send upsertScans message to user \
-                                            \(user) (client.id: \(client.id)): \(error)
-                                            """
-                                        )
-                                    }
-
-                                }
-                                else if notification.operationType == .delete {
-
-                                    let deleteScans = DeleteScans(
-                                        document._id.hexString,
-                                        transactionHash: notification.lsidTxtHash
-                                    )
-
-                                    // MARK: Group together delete notifications
-                                    // MARK: at this point
-
-                                    // MARK: Extract to separate function in
-                                    // MARK: separate file
-
-                                    let hash = notification.lsidTxtHash
-                                        .map(\.description) ?? "nil"
-
-                                    app.logger.info(
-                                        """
-                                        sending deleteScans message to user \
-                                        \(user) (client.id: \(client.id); hash: \(hash)): \
-                                        \(deleteScans)
-                                        """
-                                    )
-                                    do {
-                                        try await client.sendJSON(
-                                            deleteScans
-                                        )
-    
-                                    } catch {
-                                        app.logger.error(
-                                            """
-                                            could not send deleteScans message to user \
-                                            \(user) (client.id: \(client.id)): \(error)
-                                            """
-                                        )
-                                    }
-
-                                }
-                                else {
-                                    app.logger.info(
-                                        """
-                                        RECEIVED ANOTHER OPERATION TYPE: \
-                                        \(notification.operationType)
-                                        """
-                                    )
-                                }
-
                             }
-                        }
+                        })
+
+                        app.sendNotificationToUserTasks.append(
+                            sendNotificationToUserTask
+                        )
+
+                    
                     }
+
+                    // after handling each notification, check cancellation
                     try Task.checkCancellation()
+
                 }
+
             } catch {
                 if Task.isCancelled || error is CancellationError {
                     app.logger.info(
@@ -235,6 +185,99 @@ func routes(_ app: Application) async throws {
         })
     
     }
+
+    /**
+     Sends a change stream notification to all clients with the same user.
+     
+     - Parameters:
+         - notification: The change stream notification.
+         - client: The client to send the notification to.
+         - document: The document that was changed.
+         - user: The user who scanned the barcode.
+     */
+    @Sendable
+    func sendNotificationToUser(
+        notification: ChangeStreamNotification<ScannedBarcode>,
+        clients: [WebSocketClient],
+        document: ScannedBarcode,
+        user: String
+    ) async throws {
+
+        let clientIDs = clients.map(\.id)
+
+        app.logger.info(
+            """
+            sendNotificationToUser: RECEIVED notification \
+            for user \(user) (clientIDs: \(clientIDs)): \(notification)
+            """
+        )
+
+        if [.insert, .replace, .update].contains(
+            notification.operationType
+        ) {
+
+            let upsertScans = UpsertScans(
+                document
+            )
+
+            app.logger.info(
+                """
+                sendNotificationToUser: sending upsertScans message to user \
+                \(user) (clientIDs: \(clientIDs)): \(upsertScans) 
+                """
+            )
+            
+            await app.webSocketClients.sendJSON(
+                upsertScans, 
+                to: clients,
+                user: user,
+                app: app
+            )
+
+        }
+        else if notification.operationType == .delete {
+
+            let deleteScans = DeleteScans(
+                document._id.hexString,
+                transactionHash: notification.lsidTxtHash
+            )
+
+            // MARK: Group together delete notifications
+            // MARK: at this point
+
+            // MARK: Extract to separate function in
+            // MARK: separate file
+
+            let hash = notification.lsidTxtHash
+                .map(\.description) ?? "nil"
+
+            app.logger.info(
+                """
+                sending deleteScans message to user \
+                \(user) (clientIDs: \(clientIDs)); hash: \(hash)): \
+                \(deleteScans)
+                """
+            )
+
+            await app.webSocketClients.sendJSON(
+                deleteScans, 
+                to: clients,
+                user: user,
+                app: app
+            )
+
+        }
+        else {
+            app.logger.info(
+                """
+                RECEIVED ANOTHER OPERATION TYPE for user \(user): \
+                \(notification.operationType)
+                """
+            )
+        }
+
+    }
+
 
     /// Retrieves all scanned barcodes for a user from the database.
     /// - Parameter user: The user who scanned the barcodes. If `nil`, then all
@@ -436,7 +479,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.5.1)"
+        let message = "success (version 0.5.2)"
         req.logger.info("\(message)")
         return message
     }

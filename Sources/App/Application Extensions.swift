@@ -16,6 +16,10 @@ private struct ChangeStreamTaskStorageKey: Sendable, StorageKey {
     typealias Value = Task<Void, Error>
 }
 
+private struct SendNotificationToUserTaskStorageKey: Sendable, StorageKey {
+    typealias Value = [Task<Void, Never>]
+}
+
 private struct SendScansToUsersTaskStorageKey: Sendable, StorageKey {
     typealias Value = Task<Void, Error>
 }
@@ -28,6 +32,15 @@ extension Application {
         }
         set {
             self.storage[ChangeStreamTaskStorageKey.self] = newValue
+        }
+    }
+
+    var sendNotificationToUserTasks: [Task<Void, Never>] {
+        get {
+            return self.storage[SendNotificationToUserTaskStorageKey.self] ?? []
+        }
+        set {
+            self.storage[SendNotificationToUserTaskStorageKey.self] = newValue
         }
     }
 

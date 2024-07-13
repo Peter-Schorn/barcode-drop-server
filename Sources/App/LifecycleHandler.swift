@@ -15,7 +15,14 @@ struct BarcodeDropLifecycleHandler: LifecycleHandler {
 
     // Called before application shutdown.
     func shutdown(_ app: Application) {
+        
         app.logger.notice("\(Self.self): APP WILL SHUTDOWN")
+
+        // close all websocket connections
+
+        let webSocketClients = app.webSocketClients
+        webSocketClients.closeWebsockets()
+
     }
 
 }
