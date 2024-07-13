@@ -5,6 +5,8 @@ import Vapor
 
 class WebSocketClient: @unchecked Sendable {
     
+    static let logger = Logger(label: "com.Peter-Schorn.WebsocketClient")
+
     let id: UUID
     let user: String
     let socket: WebSocket
@@ -22,6 +24,20 @@ class WebSocketClient: @unchecked Sendable {
 
         try await self.socket.sendJSON(value, using: encoder)
         
+    }
+
+    func close() {
+        do {
+            try self.socket.close().wait()
+
+        } catch {
+            Self.logger.error(
+                """
+                WebSocketClient.close: could not close websocket for client: \
+                \(self): \(error)
+                """
+            )
+        }
     }
     
 }

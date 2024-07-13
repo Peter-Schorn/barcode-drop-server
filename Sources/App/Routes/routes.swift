@@ -217,7 +217,8 @@ func routes(_ app: Application) async throws {
         ) {
 
             let upsertScans = UpsertScans(
-                document
+                document,
+                transactionHash: notification.lsidTxtHash
             )
 
             app.logger.info(
@@ -230,8 +231,7 @@ func routes(_ app: Application) async throws {
             await app.webSocketClients.sendJSON(
                 upsertScans, 
                 to: clients,
-                user: user,
-                app: app
+                user: user
             )
 
         }
@@ -241,12 +241,6 @@ func routes(_ app: Application) async throws {
                 document._id.hexString,
                 transactionHash: notification.lsidTxtHash
             )
-
-            // MARK: Group together delete notifications
-            // MARK: at this point
-
-            // MARK: Extract to separate function in
-            // MARK: separate file
 
             let hash = notification.lsidTxtHash
                 .map(\.description) ?? "nil"
@@ -262,8 +256,7 @@ func routes(_ app: Application) async throws {
             await app.webSocketClients.sendJSON(
                 deleteScans, 
                 to: clients,
-                user: user,
-                app: app
+                user: user
             )
 
         }
@@ -1189,7 +1182,7 @@ func routes(_ app: Application) async throws {
 
         guard let user = req.parameters.get("user") else {
             req.logger.error("could not get user parameter: \(req.url)")
-            Task.detached(operation: { 
+            let closeSocketTask = Task.detached(operation: { 
                 do {
                     try await ws.close()
                 } catch {
@@ -1198,6 +1191,7 @@ func routes(_ app: Application) async throws {
                     )
                 }
             })
+            app.addOtherTask(closeSocketTask)
             return
         }
 
@@ -1209,10 +1203,11 @@ func routes(_ app: Application) async throws {
 
         app.webSocketClients.add(client)
 
-        Task.detached {
+        let sendScansTask = Task.detached {
             try await Task.sleep(for: .seconds(2))
             await sendAllScansToUser(user)
         }
+        app.addOtherTask(sendScansTask)
 
         req.logger.info(
             """

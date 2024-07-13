@@ -24,6 +24,14 @@ private struct SendScansToUsersTaskStorageKey: Sendable, StorageKey {
     typealias Value = Task<Void, Error>
 }
 
+private struct OtherTasksStorageKey: Sendable, StorageKey {
+    typealias Value = [Task<Void, Never>]
+}
+
+private struct OtherThrowingTasksStorageKey: Sendable, StorageKey {
+    typealias Value = [Task<Void, Error>]
+}
+
 extension Application {
 
     var changeStreamTask: Task<Void, Error>? {
@@ -51,6 +59,32 @@ extension Application {
         set {
             self.storage[SendScansToUsersTaskStorageKey.self] = newValue
         }
+    }
+
+    var otherTasks: [Task<Void, Never>] {
+        get {
+            return self.storage[OtherTasksStorageKey.self] ?? []
+        }
+        set {
+            self.storage[OtherTasksStorageKey.self] = newValue
+        }
+    }
+
+    func addOtherTask(_ task: Task<Void, Never>) {
+        self.otherTasks.append(task)
+    }
+
+    var otherThrowingTasks: [Task<Void, Error>] {
+        get {
+            return self.storage[OtherThrowingTasksStorageKey.self] ?? []
+        }
+        set {
+            self.storage[OtherThrowingTasksStorageKey.self] = newValue
+        }
+    }
+
+    func addOtherTask(_ task: Task<Void, Error>) {
+        self.otherThrowingTasks.append(task)
     }
 
     var webSocketClients: WebsocketClients {

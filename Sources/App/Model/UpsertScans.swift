@@ -34,21 +34,25 @@ struct UpsertScans: Sendable, Content {
 
     let newScans: [ScannedBarcodeResponse]
 
-    init(_ newScans: [ScannedBarcodeResponse]) {
+    /// A unique identifier for all messages from the same transaction.
+    let transactionHash: Int?
+
+    init(_ newScans: [ScannedBarcodeResponse], transactionHash: Int? = nil) {
         self.newScans = newScans
+        self.transactionHash = transactionHash
     }
 
-    init(_ newScan: ScannedBarcodeResponse) {
-        self.init([newScan])
+    init(_ newScan: ScannedBarcodeResponse, transactionHash: Int? = nil) {
+        self.init([newScan], transactionHash: transactionHash)
     }
 
-    init(_ newScan: ScannedBarcode) {
-        self.init(ScannedBarcodeResponse(newScan))
+    init(_ newScan: ScannedBarcode, transactionHash: Int? = nil) {
+        self.init(ScannedBarcodeResponse(newScan), transactionHash: transactionHash)
     }
 
-    init(_ newScans: [ScannedBarcode]) {
+    init(_ newScans: [ScannedBarcode], transactionHash: Int? = nil) {
         let newScans = newScans.map { ScannedBarcodeResponse($0) }
-        self.init(newScans)
+        self.init(newScans, transactionHash: transactionHash)
     }
 
     init(from decoder: Decoder) throws {
@@ -76,17 +80,26 @@ struct UpsertScans: Sendable, Content {
             forKey: .newScans
         )
 
+        self.transactionHash = try container.decodeIfPresent(
+            Int.self, 
+            forKey: .transactionHash
+        )
+
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(Self.type, forKey: .type)
         try container.encode(self.newScans, forKey: .newScans)
+        try container.encodeIfPresent(
+            self.transactionHash, forKey: .transactionHash
+        )
     }
 
     enum CodingKeys: String, CodingKey {
         case type
         case newScans
+        case transactionHash
     }
 
 }

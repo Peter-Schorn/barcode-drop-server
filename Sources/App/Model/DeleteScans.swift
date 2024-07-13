@@ -24,6 +24,7 @@ struct DeleteScans: Sendable, Content {
 
     let ids: [String]
 
+    /// A unique identifier for all messages from the same transaction.
     let transactionHash: Int?
 
     init(_ ids: [String], transactionHash: Int? = nil) {

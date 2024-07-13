@@ -34,12 +34,17 @@ struct ReplaceAllScans: Sendable, Content {
 
     let scans: [ScannedBarcodeResponse]
 
-    init(_ scans: [ScannedBarcodeResponse]) {
+    /// A unique identifier for all messages from the same transaction.
+    let transactionHash: Int?
+
+    init(_ scans: [ScannedBarcodeResponse], transactionHash: Int? = nil) {
         self.scans = scans
+        self.transactionHash = transactionHash
     }
 
-    init(_ scans: [ScannedBarcode]) {
+    init(_ scans: [ScannedBarcode], transactionHash: Int? = nil) {
         self.scans = ScannedBarcodeResponse.array(scans)
+        self.transactionHash = transactionHash
     }
 
     init(from decoder: Decoder) throws {
@@ -67,15 +72,24 @@ struct ReplaceAllScans: Sendable, Content {
             forKey: .scans
         )
 
+        self.transactionHash = try container.decodeIfPresent(
+            Int.self, 
+            forKey: .transactionHash
+        )
+
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(Self.type, forKey: .type)
         try container.encode(self.scans, forKey: .scans)
+        try container.encodeIfPresent(
+            self.transactionHash, forKey: .transactionHash
+        )
     }
 
     enum CodingKeys: String, CodingKey {
+        case transactionHash
         case type
         case scans
     }

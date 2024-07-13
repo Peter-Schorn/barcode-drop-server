@@ -2,34 +2,34 @@ import Foundation
 import Logging
 import Vapor
 
-// MARK: - WebsocketClients storage -
+// MARK: - WebsocketClients webSocketStorage -
 
 class WebsocketClients: @unchecked Sendable {
     
-    let logger = Logger(label: "com.Peter-Schorn.WebsocketClients")
+    static let logger = Logger(label: "com.Peter-Schorn.WebsocketClients")
 
     private let eventLoop: EventLoop
-    private var storage: [UUID: WebSocketClient]
+    private var webSocketStorage: [UUID: WebSocketClient]
     
     var active: [WebSocketClient] {
-        self.storage.values.filter { !$0.socket.isClosed }
+        self.webSocketStorage.values.filter { !$0.socket.isClosed }
     }
 
     init(eventLoop: EventLoop, clients: [UUID: WebSocketClient] = [:]) {
         self.eventLoop = eventLoop
-        self.storage = clients
+        self.webSocketStorage = clients
     }
     
     func add(_ client: WebSocketClient) {
         
-        self.logger.info(
+        Self.logger.info(
             """
             WebsocketClients.add(_:) adding client: \(client.user) \
             (client id: \(client.id)
             """
         )
 
-        self.storage[client.id] = client
+        self.webSocketStorage[client.id] = client
 
         //  handle incoming messages
         client.socket.onText { [weak self] ws, text in
@@ -42,7 +42,7 @@ class WebsocketClients: @unchecked Sendable {
 
             // send high-level pong response
             if text == "ping" {
-                self.logger.info(
+                Self.logger.info(
                     """
                     \(loggingPrefix) received ping -> sending pong
                     """
@@ -50,7 +50,7 @@ class WebsocketClients: @unchecked Sendable {
                 ws.send("pong")
             }
             else {
-                self.logger.info(
+                Self.logger.info(
                     """
                     \(loggingPrefix) received text: "\(text)"
                     """
@@ -61,7 +61,7 @@ class WebsocketClients: @unchecked Sendable {
 
         // handle websocket disconnect
         client.socket.onClose.whenComplete { [weak self] result in
-            self?.logger.info(
+            Self.logger.info(
                 """
                 websocket disconnected for user \(client.user) \
                 (client id: \(client.id)) result: \(result)
@@ -73,7 +73,7 @@ class WebsocketClients: @unchecked Sendable {
         client.socket.pingInterval = .seconds(5)
 
         client.socket.onPing { [weak self] ws, data in
-            self?.logger.trace(
+            Self.logger.trace(
                 """
                 \(client.user) received low-level PING for user '\(client.user)' \
                 (client id: \(client.id)): \
@@ -83,7 +83,7 @@ class WebsocketClients: @unchecked Sendable {
         }
 
         client.socket.onPong { [weak self] ws, data in
-            self?.logger.trace(
+            Self.logger.trace(
                 """
                 \(client.user) received low-level PONG for user '\(client.user)' \
                 (client id: \(client.id)) \
@@ -98,67 +98,92 @@ class WebsocketClients: @unchecked Sendable {
         _ value: Encodable,
         to clients: [WebSocketClient],
         user: String,
-        app: Application,
         using encoder: JSONEncoder = .iso8601
     ) async {
 
-        for client in clients {
-            do {
-                try await client.sendJSON(value, using: encoder)
+        // only group together delete scans for now
+        // (and grouped messages must be of the same type)
+        if let deleteScans = value as? DeleteScans {
 
-            } catch {
+            let transactionHash = deleteScans.transactionHash
+            let transactionHashString = transactionHash.map { "\($0)" } ?? "nil"
 
-                self.logger.error(
-                    """
-                    could not send JSON message to user \(client.user) \
-                    (client: \(client)): \(error)
-                    """
-                )
-                app.logger.error(
-                    """
-                    could not send upsertScans message to user \
-                    \(user) (client: \(client)): \(error)
-                    """
-                )
+            Self.logger.info(
+                """
+                WebsocketClients.sendJSON: sending deleteScans message \
+                to clients (transactionHash: \(transactionHashString)): \
+                \(clients)
+                """
+            )
+
+            // MARK: Group together delete notifications at this point
+            // group based on the transaction hash and time of the message
+
+            for client in clients {
+                do {
+                    try await client.sendJSON(deleteScans, using: encoder)
+
+                } catch {
+                    Self.logger.error(
+                        """
+                        could not send deleteScans message \
+                        to client: \(client): \(error)
+                        """
+                    )
+                }
+            }
+        }
+        else {
+            for client in clients {
+                do {
+                    try await client.sendJSON(value, using: encoder)
+
+                } catch {
+                    Self.logger.error(
+                        """
+                        could not send JSON message \
+                        to client: \(client): \(error)
+                        """
+                    )
+                }
             }
         }
 
+    
     }
 
     func remove(_ client: WebSocketClient) {
 
-        do {
-            try client.socket.close().wait()
+        Self.logger.info(
+            """
+            WebsocketClients.remove(_:) removing client: \(client.user) \
+            (client id: \(client.id))
+            """
+        )
 
-        } catch {
-            self.logger.error(
-                """
-                WebSocketClients.remove: could not close websocket for client: \(client): \(error)
-                """
-            )
-        }
+        client.close()
 
-        self.storage[client.id] = nil
+        self.webSocketStorage[client.id] = nil
 
     }
     
     /// Returns all clients for the given user.
     func clientsForUser(_ user: String) -> [WebSocketClient] {
-        self.storage.values.filter { $0.user == user }
+        self.webSocketStorage.values.filter { $0.user == user }
     }
 
     subscript(uuid: UUID) -> WebSocketClient? {
         get {
-            self.storage[uuid]
+            self.webSocketStorage[uuid]
         }
         set {
-            self.storage[uuid] = newValue
+            self.webSocketStorage[uuid] = newValue
         }
     }
 
     deinit {
         
-        self.logger.notice(
+        Self.logger.notice(
             """
             WebSocketClients.deinit: calling self.closeWebsockets()
             """
@@ -170,20 +195,20 @@ class WebsocketClients: @unchecked Sendable {
 
     func closeWebsockets() {
 
-        let clients = self.storage.values
-        self.logger.notice(
+        let clients = self.webSocketStorage.values
+        Self.logger.notice(
             """
             WebSocketClients.closeWebsockets: closing websockets for clients: \
             \(clients)
             """
         )
-        let futures = self.storage.values.map { $0.socket.close() }
+        let futures = self.webSocketStorage.values.map { $0.socket.close() }
 
         do {
             try self.eventLoop.flatten(futures).wait()
 
         } catch {
-            self.logger.error(
+            Self.logger.error(
                 """
                 WebSocketClients.closeWebsockets: error closing sockets: \
                 clients: \(clients): \(error)
