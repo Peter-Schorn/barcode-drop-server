@@ -6,11 +6,14 @@ import MongoKitten
  Represents the message sent from the server to the client via a WebSocket
  connection to delete scans from the database.
 
+ The transactionHash 
+
  Example JSON:
 
  {    
      type: "deleteScans",
-     id: "123e4567-e89b-12d3-a456-426614174000"
+     ids: ["66913db6e53ca35a6c7edd39", "66913db2db0ee00492392758"],
+     transactionHash: 123456
  }      
  */
 struct DeleteScans: Sendable, Content {

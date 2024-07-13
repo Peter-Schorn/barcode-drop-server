@@ -1,7 +1,7 @@
 import Vapor
 import Foundation
 
-struct DeleteScansRequestBody: Content {
+struct DeleteScansRequest: Content {
     
     static let defaultContentType = HTTPMediaType.json
 
@@ -21,7 +21,7 @@ struct DeleteScansRequestBody: Content {
 
 }
 
-extension DeleteScansRequestBody: Codable {
+extension DeleteScansRequest: Codable {
     
     enum CodingKeys: String, CodingKey {
         case ids
@@ -51,7 +51,7 @@ extension DeleteScansRequestBody: Codable {
         } catch let dictionaryDecodingError  {
             print(
                 """
-                Error decoding DeleteScansRequestBody \
+                Error decoding DeleteScansRequest \
                 (dictionaryDecodingError):
                 \(dictionaryDecodingError)
                 """

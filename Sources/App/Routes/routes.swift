@@ -170,8 +170,6 @@ func routes(_ app: Application) async throws {
                                     // MARK: Extract to separate function in
                                     // MARK: separate file
 
-                                    // let lsid: [UInt8] = notification.lsidBinary?.data.map({ $0 }) ?? []
-
                                     let hash = notification.lsidTxtHash
                                         .map(\.description) ?? "nil"
 
@@ -365,13 +363,13 @@ func routes(_ app: Application) async throws {
     }
 
     @Sendable
-    func deleteWithTransaction(
+    func deleteBarcodesWithTransaction(
         _ filterDoc: Document
     ) async throws -> DeleteReply {
 
         app.logger.info(
             """
-            deleteWithTransaction: deleting with transaction: \
+            deleteBarcodesWithTransaction: deleting with transaction: \
             filterDoc: \(filterDoc)
             """
         )
@@ -385,7 +383,7 @@ func routes(_ app: Application) async throws {
                 )
                 app.logger.info(
                     """
-                    deleteWithTransaction: delete result: \(result)
+                    deleteBarcodesWithTransaction: delete result: \(result)
                     """
                 )
                 return result
@@ -395,20 +393,34 @@ func routes(_ app: Application) async throws {
     }
 
     @Sendable
-    func deleteWithTransaction<Q: MongoKittenQuery & Sendable>(
+    func deleteBarcodesWithTransaction<Q: MongoKittenQuery & Sendable>(
         _ filterDoc: Q
     ) async throws -> DeleteReply {
-        return try await deleteWithTransaction(filterDoc.makeDocument())
+        return try await deleteBarcodesWithTransaction(filterDoc.makeDocument())
     }
 
     @Sendable
-    func getAllSplashText() async throws -> [String] {
-        let splashTexts: [String] = try await app.splashTextCollection
+    func getAllSplashText() async throws -> [SplashText] {
+        let splashTexts: [SplashText] = try await app.splashTextCollection
             .find()
             .decode(SplashText.self)
             .drain()
-            .map { $0.message }
+            // .map { $0.message }
         return splashTexts
+    }
+
+    @Sendable
+    func getRandomSplashText() async throws -> SplashText? {
+        
+        let randomSplashText: SplashText? = try await app.splashTextCollection
+            .buildAggregate(build: {
+                Sample(1)
+            })
+            .decode(SplashText.self)
+            .firstResult()
+
+        return randomSplashText
+
     }
 
     // MARK: - Configure Tasks -
@@ -424,7 +436,7 @@ func routes(_ app: Application) async throws {
     //
     // Returns a success message with the version string.
     app.get { req async -> String in
-        let message = "success (version 0.5.0)"
+        let message = "success (version 0.5.1)"
         req.logger.info("\(message)")
         return message
     }
@@ -455,13 +467,13 @@ func routes(_ app: Application) async throws {
 
             let user = req.parameters.get("user")
 
-            let scan: ScanRequestBody = try Result<ScanRequestBody, Error>{
+            let scan: ScannedBarcodeRequest = try Result<ScannedBarcodeRequest, Error>{
                 // first try to decode using the content type in the header or 
                 // default content type
-                try req.content.decode(ScanRequestBody.self)
+                try req.content.decode(ScannedBarcodeRequest.self)
             }
             // now, try other content types
-            .flatMapErrorThrowing({ error -> ScanRequestBody in
+            .flatMapErrorThrowing({ error -> ScannedBarcodeRequest in
                 req.logger.debug(
                     """
                     could not decode as header-specified or default content type: \
@@ -469,17 +481,17 @@ func routes(_ app: Application) async throws {
                     \(error)
                     """
                 )
-                return try req.query.decode(ScanRequestBody.self)   
+                return try req.query.decode(ScannedBarcodeRequest.self)   
             })
-            .flatMapErrorThrowing({ error -> ScanRequestBody in
+            .flatMapErrorThrowing({ error -> ScannedBarcodeRequest in
                 req.logger.debug(
                     "could not decode query for \(req.url): \(error)"
                 )
-                return try req.content.decode(ScanRequestBody.self, as: .json)
+                return try req.content.decode(ScannedBarcodeRequest.self, as: .json)
             })
-            .flatMapErrorThrowing({ error -> ScanRequestBody in
+            .flatMapErrorThrowing({ error -> ScannedBarcodeRequest in
                 req.logger.debug("could not decode as JSON: \(error)")
-                return try req.content.decode(ScanRequestBody.self, as: .formData)
+                return try req.content.decode(ScannedBarcodeRequest.self, as: .formData)
             })
             .mapError({ error in
                 req.logger.debug("could not decode as form data: \(error)")
@@ -671,11 +683,10 @@ func routes(_ app: Application) async throws {
             req.logger.info(
                 """
                 no scanned barcodes found for user: \(user); \
-                will return empty response
-                
+                will return 204 No Content response
                 """
             )
-            return Response(status: .ok)
+            return Response(status: .noContent)
         }
 
         let scannedBarcodeResponse = ScannedBarcodeResponse(scan)
@@ -738,7 +749,7 @@ func routes(_ app: Application) async throws {
 
         req.logger.info("retrieved splash text: \(splashTexts)")
 
-        return splashTexts
+        return splashTexts.map(\.message)
 
     }
 
@@ -749,16 +760,14 @@ func routes(_ app: Application) async throws {
 
         req.logger.info("retrieving random splash text")
 
-        let splashTexts = try await getAllSplashText()
-
-        guard let randomSplashText = splashTexts.randomElement() else {
+        guard let randomSplashText: SplashText = try await getRandomSplashText() else {
             req.logger.error("could not get random splash text")
             throw Abort(.internalServerError)
         }
 
         req.logger.info("retrieved random splash text: \(randomSplashText)")
 
-        return randomSplashText
+        return randomSplashText.message
 
     }
 
@@ -771,32 +780,47 @@ func routes(_ app: Application) async throws {
     // Request body: { "message": "Hello, World!" }
     app.post("splash-text") { req async throws -> String in
 
-        let splashText: SplashText = try req.content.decode(SplashText.self)
+        let splashTextRequestBody = try req.content.decode(
+            SplashTextRequest.self
+        )
 
-        req.logger.info("adding splash text: \(splashText)")
+        let splashText = SplashText(splashTextRequestBody)
+
+        req.logger.info(
+            """
+            adding splash text: \(splashText); \
+            splashTextRequestBody: \(splashTextRequestBody)
+            """
+        )
 
         try await app.splashTextCollection.insertEncoded(splashText)
 
         req.logger.info("added splash text: \(splashText)")
 
-        return "added splash text: \(splashText)"
+        let splashTextResponse = SplashTextResponse(splashText)
+        return "added splash text: \(splashTextResponse)"
 
     }
 
 
     // MARK: - DELETE -
 
-    // MARK: Delete /splash-text
+    // MARK: DELETE /splash-text
     //
-    // deletes a splash text by IDs from the database
+    // deletes splash texts by IDs from the database
     app.delete("splash-text") { req async throws -> String in
 
         let ids: [String] = try req.content.decode([String].self)
 
         req.logger.info("deleting splash text with ids: \(ids)")
 
+        // let idDoc: Document = ["_id": ["$in": objectIDs]]
+
+        let objectIDs = ids.compactMap { ObjectId($0) }
+
         let result = try await app.splashTextCollection.deleteAll(
-            where: "_id" == ["$in": ids.compactMap { ObjectId($0) }]
+            // where: "_id" == ["$in": ids.compactMap { ObjectId($0) }]
+            where: ["_id": ["$in": objectIDs]]
         )
 
         req.logger.info("delete result: \(result)")
@@ -812,7 +836,7 @@ func routes(_ app: Application) async throws {
         req.logger.info("====== deleting all barcodes ======")
 
         // let result = try await app.barcodesCollection.deleteAll(where: [:])
-        let result = try await deleteWithTransaction([:])
+        let result = try await deleteBarcodesWithTransaction([:])
 
         req.logger.info("delete result: \(result)")
 
@@ -846,7 +870,7 @@ func routes(_ app: Application) async throws {
         // let result = try await app.barcodesCollection.deleteAll(
         //     where: "_id" != ["$in": lastScanIDs]
         // )
-        let result = try await deleteWithTransaction(
+        let result = try await deleteBarcodesWithTransaction(
             "_id" != ["$in": lastScanIDs]
         )
 
@@ -875,7 +899,7 @@ func routes(_ app: Application) async throws {
         // let result = try await app.barcodesCollection.deleteAll(
         //     where: "user" == user
         // )
-        let result = try await deleteWithTransaction("user" == user)
+        let result = try await deleteBarcodesWithTransaction("user" == user)
 
         req.logger.info(
             "delete result for user \(user ?? "nil"): \(result)"
@@ -910,7 +934,7 @@ func routes(_ app: Application) async throws {
             "last \(n) scans for user \(user ?? "nil"): \(lastScans)"
         )
 
-        let result = try await deleteWithTransaction(
+        let result = try await deleteBarcodesWithTransaction(
             "user" == user && "_id" != ["$in": lastScanIDs]
         )
 
@@ -941,16 +965,16 @@ func routes(_ app: Application) async throws {
     //
     app.delete("scans") { req async throws -> String in
 
-        let deleteScansRequest: DeleteScansRequestBody = try Result { 
-            try req.content.decode(DeleteScansRequestBody.self)
+        let deleteScansRequest: DeleteScansRequest = try Result { 
+            try req.content.decode(DeleteScansRequest.self)
         }
-        .flatMapErrorThrowing({ error -> DeleteScansRequestBody in
+        .flatMapErrorThrowing({ error -> DeleteScansRequest in
             req.logger.info(
                 """
                 could not decode request body as JSON: \(error)
                 """
             )
-            return try req.query.decode(DeleteScansRequestBody.self)
+            return try req.query.decode(DeleteScansRequest.self)
         })
         .mapError({ error -> Error in
             req.logger.error(
@@ -985,7 +1009,7 @@ func routes(_ app: Application) async throws {
         // let result = try await app.barcodesCollection.deleteAll(
         //     where: doc
         // )
-        let result = try await deleteWithTransaction(doc)
+        let result = try await deleteBarcodesWithTransaction(doc)
 
         req.logger.info(
             "delete result: \(result) (request: \(deleteScansRequest)"
@@ -1030,7 +1054,7 @@ func routes(_ app: Application) async throws {
         // let result = try await app.barcodesCollection.deleteAll(
         //     where: "date" < date
         // )
-        let result = try await deleteWithTransaction("date" < date)
+        let result = try await deleteBarcodesWithTransaction("date" < date)
 
         req.logger.info(
             """
@@ -1087,7 +1111,7 @@ func routes(_ app: Application) async throws {
         // let result = try await app.barcodesCollection.deleteAll(
         //     where: "user" == user && "date" < date
         // )
-        let result = try await deleteWithTransaction(
+        let result = try await deleteBarcodesWithTransaction(
             "user" == user && "date" < date
         )
 

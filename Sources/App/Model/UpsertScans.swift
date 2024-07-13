@@ -8,15 +8,23 @@ import MongoKitten
 
  Example JSON:
 
- {    
+ {
      type: "upsertScans",
-     newScans: {
-         barcode: "1234567890",
-         user: "schornpe",
-         id: "123e4567-e89b-12d3-a456-426614174000",
-         date: "2021-08-01T12:00:00Z"
-     }   
- }      
+     newScans: [
+         {
+             "barcode" : "woah man",
+             "date" : "2024-07-12T14:54:36Z",
+             "id" : "669143ac4b3057f2b8dbc027",
+             "user" : "schornpe"
+         },
+         {
+             "barcode" : "123",
+             "date" : "2024-07-12T14:54:20Z",
+             "id" : "6691439c93b6de9d1f797b35",
+             "user" : "schornpe"
+         }
+     ]
+ }
  */
 struct UpsertScans: Sendable, Content {
 

@@ -3,20 +3,21 @@ import Vapor
 import MongoKitten
 import Meow
 
-struct SplashText: @unchecked Sendable, Model, Codable {
+struct SplashTextResponse: @unchecked Sendable, Content {
 
-    @Field var _id: ObjectId
-    @Field var message: String
+    static let defaultContentType = HTTPMediaType.json
 
-    init(id: ObjectId?, message: String) {
-        self._id = id ?? ObjectId()
+    let message: String
+    let id: String
+
+    init(message: String, id: String) {
         self.message = message
+        self.id = id
     }
 
-    init(_ splashTextRequestBody: SplashTextRequest) {
-        self._id = splashTextRequestBody.id
-            .flatMap { ObjectId($0) } ?? ObjectId()
-        self.message = splashTextRequestBody.message
+    init(_ splashText: SplashText) {
+        self.message = splashText.message
+        self.id = splashText._id.hexString
     }
 
     init(from decoder: Decoder) throws {
@@ -24,12 +25,14 @@ struct SplashText: @unchecked Sendable, Model, Codable {
         let container = try decoder.container(
             keyedBy: CodingKeys.self
         )
+
         self.message = try container.decode(
             String.self, forKey: .message
         )
-        self._id = try container.decodeIfPresent(
-            ObjectId.self, forKey: ._id
-        ) ?? ObjectId()
+
+        self.id = try container.decode(
+            String.self, forKey: .id
+        )
 
     }
 
@@ -38,17 +41,19 @@ struct SplashText: @unchecked Sendable, Model, Codable {
         var container = encoder.container(
             keyedBy: CodingKeys.self
         )
+
         try container.encode(
             self.message, forKey: .message
         )
+
         try container.encode(
-            self._id, forKey: ._id
+            self.id, forKey: .id
         )
 
     }
 
     private enum CodingKeys: String, CodingKey {
-        case _id
+        case id
         case message
     }
 
