@@ -504,7 +504,7 @@ func routes(_ app: Application) async throws {
             )
             
             let scannedBarcode = ScannedBarcode(
-                _id: ObjectId(),
+                id: scan.id,
                 barcode: scan.barcode,
                 user: user,
                 date: date // save date barcode was scanned to the database
